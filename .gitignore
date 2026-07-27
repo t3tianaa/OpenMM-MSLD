@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# OS
+.DS_Store
+
+# Data / outputs (keep these out of git; store references deliberately)
+*.dcd
+*.xtc
+*.chk
+*.log
+validation/**/out/
+
+# Env
+.ipynb_checkpoints/
