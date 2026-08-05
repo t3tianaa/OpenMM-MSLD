@@ -154,3 +154,250 @@ def add_scaled_torsions(system: mm.System, model) -> list[mm.CustomTorsionForce]
             system.addForce(f)
             created.append(f)
     return created
+
+
+# ---------------------------------------------------------------------
+# Electrostatics + PME
+# ---------------------------------------------------------------------
+# Scale each alchemical atom's charge linearly with lambda:
+#     charge = lambda_b * q_i        (full charge at lambda_b = 1)
+#
+# Because the dependence is linear, no custom force is needed. We keep the
+# standard NonbondedForce and add a per-atom parameter offset that contributes
+# lambda_b * q_i to the charge. This preserves native PME handling of long-range
+# electrostatics with the scaled charges.
+#
+# Only charges are modified here. Lennard-Jones (epsilon) is handled separately
+# in add_scaled_lj().
+#
+# Note: NonbondedForce does not expose dU/dlambda for parameter offsets, so that
+# derivative is obtained by finite difference elsewhere.
+_E = unit.elementary_charge
+
+
+def _alch_blocks(model) -> list[int]:
+    """Non-environment blocks that actually own atoms."""
+    return sorted({model.atom_block[a] for a in range(model.n_atoms)
+                   if model.atom_block[a] != 0})
+
+
+def _existing_exception_pairs(nbf: mm.NonbondedForce) -> set:
+    pairs = set()
+    for k in range(nbf.getNumExceptions()):
+        p1, p2, *_ = nbf.getExceptionParameters(k)
+        pairs.add((min(p1, p2), max(p1, p2)))
+    return pairs
+
+
+def add_same_site_exclusions(nbf: mm.NonbondedForce, model) -> int:
+    """Fully exclude every pair of atoms in different blocks of the SAME site
+    (mutually-exclusive overlapping substituents must never interact). Skips
+    pairs that already have an exception. Returns the number added."""
+    existing = _existing_exception_pairs(nbf)
+    added = 0
+    for s in range(model.n_sites):
+        blocks = model.blocks_in_site(s)
+        for x in range(len(blocks)):
+            for y in range(x + 1, len(blocks)):
+                for a in model.blocks[blocks[x]].atoms:
+                    for c in model.blocks[blocks[y]].atoms:
+                        key = (min(a, c), max(a, c))
+                        if key in existing:
+                            continue
+                        nbf.addException(a, c, 0.0, 0.0, 0.0)  # full exclusion
+                        existing.add(key)
+                        added += 1
+    return added
+
+
+def add_scaled_electrostatics(system: mm.System, model) -> mm.NonbondedForce | None:
+    """Scale each alchemical atom's charge to lambda_b * q_i via NonbondedForce
+    parameter offsets, and add same-site exclusions. LJ (epsilon) untouched.
+    Returns the NonbondedForce, or None if the System has none."""
+    nbfs = _forces_of_type(system, mm.NonbondedForce)
+    if not nbfs:
+        return None
+    nbf = nbfs[0]
+    # declare one global parameter per alchemical block
+    for b in _alch_blocks(model):
+        nbf.addGlobalParameter(lambda_name(b), 1.0)     
+
+    # rewrite each alchemical atom's charge as λ_b * q_i
+    for i in range(model.n_atoms):
+        b = model.atom_block[i]
+        if b == 0:
+            continue
+        # read original
+        q, sig, eps = nbf.getParticleParameters(i)
+        q0 = q.value_in_unit(_E)
+        # base charge -> 0 (keep sigma/eps) 
+        nbf.setParticleParameters(i, 0.0, sig, eps)     
+        if q0 != 0.0:
+            # +λ_b*q0 
+            nbf.addParticleParameterOffset(lambda_name(b), i, q0, 0.0, 0.0)  
+
+    # exclude same-site pairs
+    add_same_site_exclusions(nbf, model)
+    return nbf
+
+
+# ---------------------------------------------------------------------
+# Lennard-Jones
+# ---------------------------------------------------------------------
+# Each pair must be scaled by lambda_i * lambda_j (the product of the two atoms'
+# lambdas). NonbondedForce cannot express this, since scaling epsilon yields 
+# sqrt(lambda_i * lambda_j) instead.
+#
+# We therefore remove LJ for all alchemical pairs from NonbondedForce and move it
+# into CustomNonbondedForce, where the energy expression is defined explicitly and
+# multiplied by the desired lambda factor.
+#
+# One CustomNonbondedForce is created per pair "kind", each carrying a fixed lambda
+# prefactor, with addInteractionGroup selecting the pairs it covers:
+#     block b with environment, or block b with itself   ->  * lambda_b
+#     block b with block c at a different site           ->  * lambda_b * lambda_c
+#
+# Atoms of the same site (competing substituents) are placed in no group, so they
+# never interact. Plain environment-environment LJ remains in NonbondedForce.
+# CustomNonbondedForce does expose dU/dlambda.
+#
+# Currently disabled (see DEFERRED.md): soft-core and the long-range dispersion
+# correction.
+
+
+def _match_nonbonded_method(cnbf: mm.CustomNonbondedForce, nbf: mm.NonbondedForce):
+    """Copy method / cutoff / switching from a NonbondedForce so the LJ matches."""
+    NB, CN = mm.NonbondedForce, mm.CustomNonbondedForce
+    m = nbf.getNonbondedMethod()
+    if m == NB.NoCutoff:
+        cnbf.setNonbondedMethod(CN.NoCutoff)
+    elif m == NB.CutoffNonPeriodic:
+        cnbf.setNonbondedMethod(CN.CutoffNonPeriodic)
+        cnbf.setCutoffDistance(nbf.getCutoffDistance())
+    else:  # CutoffPeriodic, Ewald, PME, LJPME -> real-space cutoff, periodic
+        cnbf.setNonbondedMethod(CN.CutoffPeriodic)
+        cnbf.setCutoffDistance(nbf.getCutoffDistance())
+    if nbf.getUseSwitchingFunction():
+        cnbf.setUseSwitchingFunction(True)
+        cnbf.setSwitchingDistance(nbf.getSwitchingDistance())
+    cnbf.setUseLongRangeCorrection(False)   # dispersion correction OFF (deferred)
+
+# LJ energy expression, with Lorentz-Berthelot combining rules for sigma/epsilon
+_LJ_EXPR = ("*4*epsilon*((sigma/r)^12-(sigma/r)^6);"
+            "sigma=0.5*(sigma1+sigma2); epsilon=sqrt(epsilon1*epsilon2)")
+
+
+def add_scaled_lj(system: mm.System, model) -> list[mm.CustomNonbondedForce]:
+    """Move all alchemical-involving LJ from the NonbondedForce into grouped,
+    block-scaled CustomNonbondedForce(s). env<->env LJ stays put. Returns the
+    created forces."""
+    nbfs = _forces_of_type(system, mm.NonbondedForce)
+    if not nbfs:
+        return []
+    nbf = nbfs[0]
+    npart = system.getNumParticles()
+
+    # capture original per-particle LJ (sigma, epsilon) BEFORE we zero anything
+    lj = []
+    for i in range(npart):
+        _, sig, eps = nbf.getParticleParameters(i)
+        lj.append((sig.value_in_unit(_NM), eps.value_in_unit(_KJ)))
+    excl = sorted(_existing_exception_pairs(nbf))          # 1-2/1-3 + same-site + 1-4
+
+    alch = _alch_blocks(model)
+    env_atoms = [i for i in range(npart) if model.atom_block[i] == 0]
+    block_atoms = {b: list(model.blocks[b].atoms) for b in alch}
+
+    def _make(sig_tuple):
+        f = mm.CustomNonbondedForce(_lambda_prefix(sig_tuple) + _LJ_EXPR)
+        f.setName("MSLDLJ_" + "_".join(map(str, sig_tuple)))
+        _match_nonbonded_method(f, nbf)
+        f.addPerParticleParameter("sigma")
+        f.addPerParticleParameter("epsilon")
+        for s, e in lj:
+            f.addParticle([s, e])
+        for a, c in excl:
+            f.addExclusion(a, c)
+        _register_lambdas(f, sig_tuple)         # globals + analytic dU/dlambda
+        return f
+
+    created = []
+    # single-lambda: env<->block b and within block b
+    for b in alch:
+        f = _make((b,))
+        if env_atoms and block_atoms[b]:
+            f.addInteractionGroup(env_atoms, block_atoms[b])
+        if len(block_atoms[b]) >= 2:
+            f.addInteractionGroup(block_atoms[b], block_atoms[b])
+        system.addForce(f)
+        created.append(f)
+    # product-lambda: block b <-> block c, different sites only
+    for x in range(len(alch)):
+        for y in range(x + 1, len(alch)):
+            b, c = alch[x], alch[y]
+            if model.blocks[b].site == model.blocks[c].site:
+                continue                        # same site -> never interact
+            f = _make((b, c))
+            f.addInteractionGroup(block_atoms[b], block_atoms[c])
+            system.addForce(f)
+            created.append(f)
+
+    # remove alchemical LJ from the stock NonbondedForce (keep charge & sigma)
+    for i in range(npart):
+        if model.atom_block[i] != 0:
+            q, sig, eps = nbf.getParticleParameters(i)
+            nbf.setParticleParameters(i, q, sig, 0.0)
+    nbf.setUseDispersionCorrection(False)       # deferred
+    return created
+
+
+# ---------------------------------------------------------------------
+# 1-4 exceptions  (N3)
+# ---------------------------------------------------------------------
+# An exception in NonbondedForce replaces the normal interaction for one specific
+# atom pair. Two kinds exist:
+#   full exclusion : charge and epsilon set to 0 -> pair does not interact.
+#                    Covers 1-2 and 1-3 neighbours, plus same-site pairs.
+#   scaled 1-4     : charge and epsilon carry the force field's reduced "1-4"
+#                    values, applied to atoms three bonds apart.
+#
+# Only the scaled 1-4 interactions need lambda scaling. When both atoms fall under
+# a single lambda (same block, or one atom in the environment), the dependence is
+# again linear in lambda_b, so an exception parameter offset handles it exactly:
+#     charge  = lambda_b * (1-4 charge)
+#     epsilon = lambda_b * (1-4 epsilon)
+# (dU/dlambda here is finite difference, as elsewhere in NonbondedForce.)
+#
+# A 1-4 whose atoms lie in different sites (requiring lambda_i * lambda_j) or in
+# the same site is rare or disallowed, so it currently raises an error.
+
+def add_scaled_14_exceptions(system: mm.System, model) -> int:
+    """Scale alchemical 1-4 exceptions by their single block lambda via exception
+    parameter offsets. Returns the number scaled. Raises on cross-site (product)
+    or same-site 1-4 exceptions."""
+    nbfs = _forces_of_type(system, mm.NonbondedForce)
+    if not nbfs:
+        return 0
+    nbf = nbfs[0]
+    scaled = 0
+    for k in range(nbf.getNumExceptions()):
+        p1, p2, cp, sig, eps = nbf.getExceptionParameters(k)
+        cpv = cp.value_in_unit(_E**2)
+        epsv = eps.value_in_unit(_KJ)
+        if cpv == 0.0 and epsv == 0.0:
+            continue                                 # full exclusion, nothing to scale
+        if model.atom_block[p1] == 0 and model.atom_block[p2] == 0:
+            continue                                 # environment 1-4, leave as-is
+        cls = model.classify_pair(p1, p2)
+        if cls[0] == "single":
+            b = cls[1]
+            nbf.setExceptionParameters(k, p1, p2, 0.0, sig, 0.0)   # base -> 0
+            nbf.addExceptionParameterOffset(lambda_name(b), k, cpv, 0.0, epsv)
+            scaled += 1
+        elif cls[0] == "product":
+            raise NotImplementedError(
+                f"cross-site 1-4 exception scaling is deferred (rare); atoms {p1},{p2}")
+        elif cls[0] == "exclude":
+            raise NotImplementedError(
+                f"same-site 1-4 exception (illegal MSLD topology?); atoms {p1},{p2}")
+    return scaled

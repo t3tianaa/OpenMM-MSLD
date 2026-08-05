@@ -51,14 +51,15 @@ def _check_unhandled(system: mm.System, model) -> None:
     def touches(idxs):
         return any(i in alch for i in idxs)
 
+    # Bonded, electrostatics, LJ, and 1-4 exceptions are handled. CMAP is not.
     for f in system.getForces():
-        if isinstance(f, mm.NonbondedForce):
-            for i in alch:
-                q, sig, eps = f.getParticleParameters(i)
-                if q._value != 0.0 or eps._value != 0.0:
+        if isinstance(f, mm.CMAPTorsionForce):
+            for i in range(f.getNumTorsions()):
+                atoms = f.getTorsionParameters(i)[1:]      # (map, a1..a4, b1..b4)
+                if any(a in alch for a in atoms):
                     raise NotImplementedError(
-                        "nonbonded/PME scaling is not implemented yet; base System "
-                        "has alchemical nonbonded particles")
+                        "CMAP scaling is not implemented; base System has an "
+                        "alchemical CMAP torsion")
 
 
 def build_msld_system(system: mm.System, model, check_unhandled: bool = True) -> dict:
@@ -74,6 +75,10 @@ def build_msld_system(system: mm.System, model, check_unhandled: bool = True) ->
     info["scaled_bond_forces"] = [f.getName() for f in forces.add_scaled_bonds(system, model)]
     info["scaled_angle_forces"] = [f.getName() for f in forces.add_scaled_angles(system, model)]
     info["scaled_torsion_forces"] = [f.getName() for f in forces.add_scaled_torsions(system, model)]
+    nbf = forces.add_scaled_electrostatics(system, model)
+    info["scaled_electrostatics"] = (nbf is not None)
+    info["scaled_lj_forces"] = [f.getName() for f in forces.add_scaled_lj(system, model)]
+    info["scaled_14_exceptions"] = forces.add_scaled_14_exceptions(system, model)
 
     if check_unhandled:
         _check_unhandled(system, model)
