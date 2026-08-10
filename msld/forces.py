@@ -352,7 +352,7 @@ def add_scaled_lj(system: mm.System, model) -> list[mm.CustomNonbondedForce]:
 
 
 # ---------------------------------------------------------------------
-# 1-4 exceptions  (N3)
+# 1-4 exceptions  
 # ---------------------------------------------------------------------
 # An exception in NonbondedForce replaces the normal interaction for one specific
 # atom pair. Two kinds exist:
@@ -401,3 +401,90 @@ def add_scaled_14_exceptions(system: mm.System, model) -> int:
             raise NotImplementedError(
                 f"same-site 1-4 exception (illegal MSLD topology?); atoms {p1},{p2}")
     return scaled
+
+
+# ---------------------------------------------------------------------
+# Biasing potentials (ALF)
+# ---------------------------------------------------------------------
+# MSLD needs biases on lambda to flatten the landscape (ALF). These are pure
+# functions of the lambda globals -- no atom positions -- so we add ONE
+# CustomExternalForce on a dummy particle whose energy is the whole bias sum
+# written in terms of lambda{b}. Its atom force is zero (no x,y,z in the
+# expression); its dU/dlambda is picked up by the finite-difference gradient.
+#
+# Fixed bias : sum_b  bias_b * lambda_b            (linear)
+# Variable   : ALF coupling biases between two blocks i, j (BLaDE types):
+#     6  quadratic : k * li * lj
+#     8  endpoint  : k * li * lj / (li + l0)
+#     10 skew      : k * lj * (1 - exp(l0 * li))
+
+
+def _variable_bias_term(vb) -> str:
+    li, lj = lambda_name(vb.i), lambda_name(vb.j)
+    k, l0 = vb.k, vb.l0
+    if vb.type == 6:
+        return f"({k})*{li}*{lj}"
+    if vb.type == 8:
+        return f"({k})*{li}*{lj}/({li}+({l0}))"
+    if vb.type == 10:
+        return f"({k})*{lj}*(1-exp(({l0})*{li}))"
+    raise NotImplementedError(
+        f"variable bias type {vb.type} not implemented (have 6, 8, 10)")
+
+
+def add_biases(system: mm.System, model) -> mm.CustomExternalForce | None:
+    """Add fixed + variable lambda biases as one position-independent force.
+    Returns the force, or None if there are no biases."""
+    terms, refs = [], set()
+    for b in range(1, model.n_blocks):
+        bias = model.blocks[b].lambda_bias
+        if bias != 0.0:
+            terms.append(f"({bias})*{lambda_name(b)}")
+            refs.add(b)
+    for vb in model.variable_biases:
+        terms.append(_variable_bias_term(vb))
+        refs.update((vb.i, vb.j))
+    if not terms:
+        return None
+
+    f = mm.CustomExternalForce(" + ".join(terms))
+    f.setName("MSLDBias")
+    for b in sorted(refs):
+        f.addGlobalParameter(lambda_name(b), 1.0)
+    f.addParticle(0, [])          # dummy anchor; energy does not depend on its position
+    system.addForce(f)
+    return f
+
+
+# ---------------------------------------------------------------------
+# Atom restraints (CATS) 
+# ---------------------------------------------------------------------
+# Keep each substituent's atoms near their own centroid so a "switched-off"
+# substituent (lambda ~ 0) does not drift away. BLaDE: U = 0.5*k*sum_i |x_i - xbar|^2.
+# That centroid restraint is IDENTICAL to a harmonic term over every in-group
+# pair with force constant k/N, so we just add pair bonds -- no centroid needed:
+#     0.5*k*sum_i |x_i - xbar|^2  ==  (k/(2N)) * sum_{i<j} |x_i - x_j|^2
+# The restraint is NOT lambda-scaled (always on), matching BLaDE.
+
+
+def add_atom_restraints(system: mm.System, model) -> mm.CustomBondForce | None:
+    """Add centroid restraints for each group in model.atom_restraints."""
+    if not model.atom_restraints:
+        return None
+    f = mm.CustomBondForce("0.5*kr*r^2")
+    f.setName("MSLDAtomRestraint")
+    f.addPerBondParameter("kr")
+    added = 0
+    for group in model.atom_restraints:
+        n = len(group)
+        if n < 2:
+            continue
+        kr = model.k_restraint / n               # per-pair constant (see identity above)
+        for a in range(n):
+            for c in range(a + 1, n):
+                f.addBond(group[a], group[c], [kr])
+                added += 1
+    if added == 0:
+        return None
+    system.addForce(f)
+    return f

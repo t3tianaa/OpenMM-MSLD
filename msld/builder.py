@@ -72,13 +72,24 @@ def build_msld_system(system: mm.System, model, check_unhandled: bool = True) ->
         raise RuntimeError("call model.finalize() before build_msld_system()")
 
     info: dict = {"lambda_parameters": lambda_parameter_names(model)}
-    info["scaled_bond_forces"] = [f.getName() for f in forces.add_scaled_bonds(system, model)]
-    info["scaled_angle_forces"] = [f.getName() for f in forces.add_scaled_angles(system, model)]
-    info["scaled_torsion_forces"] = [f.getName() for f in forces.add_scaled_torsions(system, model)]
+    # bonded scaling can be turned off per term type (BLaDE "removescaling")
+    info["scaled_bond_forces"] = (
+        [f.getName() for f in forces.add_scaled_bonds(system, model)]
+        if getattr(model, "scale_bond", True) else [])
+    info["scaled_angle_forces"] = (
+        [f.getName() for f in forces.add_scaled_angles(system, model)]
+        if getattr(model, "scale_angle", True) else [])
+    info["scaled_torsion_forces"] = (
+        [f.getName() for f in forces.add_scaled_torsions(system, model)]
+        if getattr(model, "scale_torsion", True) else [])
     nbf = forces.add_scaled_electrostatics(system, model)
     info["scaled_electrostatics"] = (nbf is not None)
     info["scaled_lj_forces"] = [f.getName() for f in forces.add_scaled_lj(system, model)]
     info["scaled_14_exceptions"] = forces.add_scaled_14_exceptions(system, model)
+    bias = forces.add_biases(system, model)
+    info["bias_force"] = bias.getName() if bias is not None else None
+    restr = forces.add_atom_restraints(system, model)
+    info["atom_restraint_force"] = restr.getName() if restr is not None else None
 
     if check_unhandled:
         _check_unhandled(system, model)

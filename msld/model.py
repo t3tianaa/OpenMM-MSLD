@@ -60,6 +60,14 @@ class MSLDModel:
         self.blocks: list[Block] = [Block(index=0, site=0)]
         self.atom_block: list[int] = [0] * self.n_atoms
         self.variable_biases: list[VariableBias] = []
+        # which bonded term types get lambda-scaled (BLaDE "removescaling").
+        # BLaDE runs usually turn bond+angle scaling OFF.
+        self.scale_bond = True
+        self.scale_angle = True
+        self.scale_torsion = True
+        # atom restraints (CATS): keep each listed group near its own centroid.
+        self.atom_restraints: list[list[int]] = []
+        self.k_restraint = 24769.0        # kJ/mol/nm^2 (BLaDE default 59.2 kcal/mol/A^2)
         self._finalized = False
 
     def add_block(self, site: int, atoms, **kw) -> int:
@@ -81,6 +89,10 @@ class MSLDModel:
 
     def add_variable_bias(self, i, j, type, l0, k, n):
         self.variable_biases.append(VariableBias(i, j, type, l0, k, n))
+
+    def add_atom_restraint(self, atoms):
+        """Restrain a group of atoms (e.g. one substituent) near its centroid."""
+        self.atom_restraints.append(list(atoms))
 
     def finalize(self):
         """Validate invariants and precompute site bookkeeping (BLaDE initialize)."""

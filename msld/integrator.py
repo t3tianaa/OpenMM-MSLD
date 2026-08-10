@@ -29,6 +29,7 @@ from .forces import lambda_name
 _NM = unit.nanometer
 _KJ = unit.kilojoule_per_mole
 _F_UNIT = _KJ / _NM
+_VEL = _NM / unit.picosecond
 KB = 0.00831446261815324          # kJ/mol/K
 
 
@@ -76,6 +77,10 @@ class LambdaDynamics:
             self.ath[b] = a
             self.bth[b] = math.sqrt((1 - a * a) * self.kT / self.mass[b])
 
+        # holonomic constraints (SHAKE/RATTLE) on atoms, if the System has any
+        self.has_constraints = system.getNumConstraints() > 0
+        self.constraint_tol = 1e-6
+
         self._F = None
         self.project()
 
@@ -101,8 +106,11 @@ class LambdaDynamics:
         """Fcomputes dU/dlambda_b for each block by finite difference of the total energy."""
         lam = self.project()
         d = [0.0] * self.model.n_blocks
+        present = self.context.getParameters()
         for b in self.dof:
             name = lambda_name(b)
+            if name not in present:          # no force uses this lambda -> dU/dlambda = 0
+                continue
             base = self.context.getParameter(name)
             self.context.setParameter(name, base + self.h); ep = self.potential_energy()
             self.context.setParameter(name, base - self.h); em = self.potential_energy()
@@ -136,6 +144,28 @@ class LambdaDynamics:
         fth = {b: -g[b] for b in self.dof}          # theta force = -dU/dtheta
         return fx, fth
 
+    # holonomic constraints on atoms (SHAKE positions, RATTLE velocities) 
+    def _drift_x(self, hdt):
+        """Half drift of the atoms, with SHAKE if the System has constraints."""
+        if not self.has_constraints:
+            self.x += hdt * self.vx
+            return
+        x_pred = self.x + hdt * self.vx
+        self.context.setPositions(x_pred * _NM)
+        self.context.applyConstraints(self.constraint_tol)          # SHAKE
+        x_con = np.array(self.context.getState(getPositions=True)
+                         .getPositions(asNumpy=True).value_in_unit(_NM))
+        self.vx += (x_con - x_pred) / hdt          # constraint impulse -> velocity
+        self.x = x_con
+
+    def _rattle(self):
+        """Remove atom-velocity components along the constraints (RATTLE)."""
+        self.context.setPositions(self.x * _NM)
+        self.context.setVelocities(self.vx * _VEL)
+        self.context.applyVelocityConstraints(self.constraint_tol)
+        self.vx = np.array(self.context.getState(getVelocities=True)
+                           .getVelocities(asNumpy=True).value_in_unit(_VEL))
+
     def step(self, nsteps=1):
         """Combined VRORV Langevin: B A O A B, over atoms and theta together."""
         hdt = 0.5 * self.dt
@@ -146,18 +176,22 @@ class LambdaDynamics:
             fx, fth = self._F
             # B (half kick): v += (dt/2)·F/m  (both x and θ)
             self.vx += hdt * fx / mx
+            if self.has_constraints:
+                self._rattle()
             for b in self.dof:
                 self.vtheta[b] += hdt * fth[b] / self.mass[b]
             # A (half drift): q += (dt/2)·v
-            self.x += hdt * self.vx
+            self._drift_x(hdt)                       # SHAKE inside if constrained
             for b in self.dof:
                 self.theta[b] += hdt * self.vtheta[b]
             # O (friction + noise = thermostat): v  = a·v + b·ξ (epsilon ~ N(0,1))
             self.vx = self.ax * self.vx + self.bx[:, None] * self.rng.standard_normal(self.vx.shape)
+            if self.has_constraints:
+                self._rattle()
             for b in self.dof:
                 self.vtheta[b] = self.ath[b] * self.vtheta[b] + self.bth[b] * self.rng.standard_normal()
             # A (half drift): q += (dt/2)·v
-            self.x += hdt * self.vx
+            self._drift_x(hdt)                       # SHAKE inside if constrained
             for b in self.dof:
                 self.theta[b] += hdt * self.vtheta[b]
             # force at the new state
@@ -165,6 +199,8 @@ class LambdaDynamics:
             fx, fth = self._F
             # B (half kick): v += (dt/2)·F/m 
             self.vx += hdt * fx / mx
+            if self.has_constraints:
+                self._rattle()
             for b in self.dof:
                 self.vtheta[b] += hdt * fth[b] / self.mass[b]
         self.project()
