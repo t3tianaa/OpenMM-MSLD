@@ -5,11 +5,6 @@ whose energy terms are block-scaled by per-block `lambda{b}`.
 
 Mirrors BLaDE Process 1 (construction): walk each base force, classify every term
 by which block-lambda(s) scale it, and route scaled terms to `forces.py`.
-
-Currently handled:  HarmonicBondForce, HarmonicAngleForce, PeriodicTorsionForce.
-Not yet handled  :  nonbonded / PME. The builder RAISES if it finds alchemical
-                    atoms in a NonbondedForce, so it never silently produces a
-                    wrong (partially-scaled) System.
 """
 from __future__ import annotations
 
