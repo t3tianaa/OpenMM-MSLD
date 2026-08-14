@@ -46,7 +46,7 @@ class CoreMapping:
                    since a variant may cross the boundary more than once (e.g. proline).
     align_xform  : {variant_name: rigid transform} placing each variant's coordinates
                    into the shared frame; empty when coordinates are already co-framed.
-    core_charges : {env_atom: reference charge}; populated by the charge stage (P1.5).
+    core_charges : {env_atom: reference charge}.
     buffer_atoms : env atoms permitted a per-variant charge (subset of env_atoms).
     """
     env_atoms: set[int]

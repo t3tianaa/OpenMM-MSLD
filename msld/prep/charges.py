@@ -1,7 +1,7 @@
 """Partial-charge policy for the hybrid topology.
 
-  * Environment atoms keep ONE fixed charge (they are shared and appear once).
-  * Each block (variant) keeps its own charges, but we RENORMALIZE them by a small
+  * Environment atoms keep one fixed charge (they are shared and appear once).
+  * Each block (variant) keeps its own charges, but we renormalize them by a small
     amount so that sum(env charges) + sum(block charges) == a whole-number target
     (the correct net charge of that variant's residue/molecule).
   * Net-charge guard: every variant at a site must reach the same integer target.
@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 
 from .mapping import CoreMapping
@@ -31,6 +32,80 @@ class ChargeResult:
     raw_net: dict[str, float]
     correction: dict[str, float]
     final_net: dict[str, float]
+
+
+# ---------------------------------------------------------------------
+# Environment-charge averaging (needed for Amber)
+# ---------------------------------------------------------------------
+# The shared environment must carry one charge per atom.
+# In CHARMM the backbone charges are standardized, so every variant already agrees.
+# In Amber the charges are RESP-fit per residue, so a shared atom can carry a different
+# charge in different variants. This is treated the following way: each atom charge becomes
+# the per-atom average charge across the variants. The small residual is then absorbed by
+# renormalize_charges.
+
+
+@dataclass
+class EnvChargeReport:
+    """Outcome of averaging env charges across variants.
+
+    averaged   : per-env-atom mean charge (same order as the input).
+    differing  : list of (label, spread, avg, values) for atoms that were not equal.
+    max_spread : the largest across-variant spread seen (in e).
+    """
+    averaged: list[float]
+    differing: list[tuple]
+    max_spread: float
+
+
+def average_env_charges(per_variant, *, labels=None, equal_tol: float = 1e-6,
+                        refuse_spread: float = 0.5, warn: bool = True) -> EnvChargeReport:
+    """Average the environment charges across variants, per shared atom.
+
+    per_variant : list over variants; each item is that variant's env charges in the
+                  same order (position i is the same shared atom in every variant).
+    labels      : optional names for the env atoms.
+
+    Returns an EnvChargeReport. When any atom's charge differs across variants, 
+    emits a warning saying we take the average. Raises if any atom's spread exceeds
+    `refuse_spread`.
+    """
+    if not per_variant:
+        raise ValueError("no variants given")
+    n = len(per_variant[0])
+    for k, pv in enumerate(per_variant):
+        if len(pv) != n:
+            raise ValueError(
+                f"variant {k} has {len(pv)} env charges, expected {n} "
+                f"(env atoms must correspond across variants)")
+
+    averaged: list[float] = []
+    differing: list[tuple] = []
+    max_spread = 0.0
+    for i in range(n):
+        vals = [pv[i] for pv in per_variant]
+        spread = max(vals) - min(vals)
+        avg = sum(vals) / len(vals)
+        averaged.append(avg)
+        max_spread = max(max_spread, spread)
+        if spread > equal_tol:
+            label = labels[i] if labels is not None else i
+            if spread > refuse_spread:
+                raise ValueError(
+                    f"env atom {label} charge varies by {spread:.3f} e across variants "
+                    f"(> {refuse_spread}); it is not really a shared atom. This looks "
+                    f"like a backbone mutation, not a side-chain site.")
+            differing.append((label, spread, avg, list(vals)))
+
+    if differing and warn:
+        names = ", ".join(str(d[0]) for d in differing[:6])
+        more = "" if len(differing) <= 6 else f" (+{len(differing) - 6} more)"
+        warnings.warn(
+            f"env charges differ across variants for {len(differing)} atom(s) "
+            f"[{names}{more}], max spread {max_spread:.3f} e; taking the per-atom "
+            f"average. Amber charges are residue-specific (RESP-fit), so this is "
+            f"expected.", stacklevel=2)
+    return EnvChargeReport(averaged=averaged, differing=differing, max_spread=max_spread)
 
 
 def _require_charges(mapping: CoreMapping, charges: dict[int, float]) -> None:
@@ -61,7 +136,7 @@ def _resolve_targets(nets: dict[str, float], targets: dict[str, int] | None,
     """Decide the integer target for each variant.
 
     If `targets` is given, use it. Otherwise auto-detect: a correctly parametrized
-    residue sums to an integer already, so we round -- but only if we are CLOSE to an
+    residue sums to an integer already, so we round - but only if we are close to an
     integer. If a raw net is far from any integer and no target was given, we refuse
     (it usually means missing atoms or wrong charges), and ask for explicit targets.
     """
@@ -83,7 +158,7 @@ def _resolve_targets(nets: dict[str, float], targets: dict[str, int] | None,
 def assert_iso_charge(mapping: CoreMapping, charges: dict[int, float], *,
                       targets: dict[str, int] | None = None,
                       tol: float = 0.25) -> int:
-    """Net-charge guard. Raises unless all variants share ONE integer net charge.
+    """Net-charge guard. Raises unless all variants share one integer net charge.
 
     Returns that shared integer. Use this to fail fast before building anything.
     """
