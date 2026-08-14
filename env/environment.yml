@@ -5,4 +5,5 @@ dependencies:
   - python=3.11
   - openmm
   - numpy
+  - parmed          # prep/merge: combine per-variant topologies (Amber + CHARMM)
 
