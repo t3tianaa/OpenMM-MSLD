@@ -77,6 +77,10 @@ def build_msld_system(system: mm.System, model, check_unhandled: bool = True) ->
     info["scaled_torsion_forces"] = (
         [f.getName() for f in forces.add_scaled_torsions(system, model)]
         if getattr(model, "scale_torsion", True) else [])
+    # CHARMM harmonic impropers (CustomTorsionForce)
+    info["scaled_improper_forces"] = (
+        [f.getName() for f in forces.add_scaled_impropers(system, model)]
+        if getattr(model, "scale_torsion", True) else [])
     nbf = forces.add_scaled_electrostatics(system, model)
     info["scaled_electrostatics"] = (nbf is not None)
     info["scaled_lj_forces"] = [f.getName() for f in forces.add_scaled_lj(system, model)]

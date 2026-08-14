@@ -218,3 +218,68 @@ def _transplant_terms(base, src, amap, block_src, cache):
         if _touches_block([adj.atom1, adj.atom2], block_src):
             t = cache.get(adj.type, base.adjust_types)
             base.adjusts.append(pmd.NonbondedException(A(adj.atom1), A(adj.atom2), type=t))
+
+
+# ---------------------------------------------------------------------
+# Cross-variant bonded-term check / delete
+# ---------------------------------------------------------------------
+# A bonded term (bond/angle/dihedral/UB/improper/CMAP/1-4) must NOT connect two blocks
+# of the same site - those variants are mutually exclusive and never interact. Folowing
+# helpers are a safety net for topologies built elsewhere (or supplied pre-merged). 
+_TERM_LISTS = [("bond", "bonds"), ("angle", "angles"), ("dihedral", "dihedrals"),
+               ("urey_bradley", "urey_bradleys"), ("improper", "impropers"),
+               ("cmap", "cmaps"), ("adjust", "adjusts")]
+_TERM_ATTR = dict(_TERM_LISTS)
+
+
+def _atom_owner(mappings) -> dict:
+    """atom index -> (site_index, block_name) for every block atom across mappings."""
+    if isinstance(mappings, CoreMapping):
+        mappings = [mappings]
+    owner: dict[int, tuple[int, str]] = {}
+    for site_i, m in enumerate(mappings):
+        for name, atoms in m.blocks.items():
+            for a in atoms:
+                owner[a] = (site_i, name)
+    return owner
+
+
+def find_cross_variant_terms(structure, mappings) -> list:
+    """Return [(category, atom_indices, term), ...] for terms that span two blocks of
+    the same site. `mappings` is one CoreMapping (single site) or a list (one per site).
+    """
+    owner = _atom_owner(mappings)
+    found = []
+    for cat, attr in _TERM_LISTS:
+        for term in getattr(structure, attr, []):
+            idxs = [a.idx for a in _term_atoms(term)]
+            per_site: dict[int, set] = {}
+            for i in idxs:
+                if i in owner:
+                    site_i, name = owner[i]
+                    per_site.setdefault(site_i, set()).add(name)
+            if any(len(names) >= 2 for names in per_site.values()):
+                found.append((cat, tuple(idxs), term))
+    return found
+
+
+def assert_no_cross_variant_terms(structure, mappings) -> None:
+    """Raise if any bonded term connects two blocks of the same site."""
+    found = find_cross_variant_terms(structure, mappings)
+    if found:
+        detail = "; ".join(f"{c}{list(idx)}" for c, idx, _ in found[:8])
+        more = "" if len(found) <= 8 else f" (+{len(found) - 8} more)"
+        raise ValueError(
+            f"{len(found)} cross-variant bonded term(s) span two blocks of the same "
+            f"site (illegal in MSLD): {detail}{more}. Remove them with "
+            f"delete_cross_variant_terms() before building.")
+
+
+def delete_cross_variant_terms(structure, mappings) -> int:
+    """Delete every bonded term that spans two blocks of the same site. Returns the
+    count removed. Safe to call when there are none (returns 0)."""
+    found = find_cross_variant_terms(structure, mappings)
+    for cat, _idx, term in found:
+        term.delete()                              # detach from its atoms
+        getattr(structure, _TERM_ATTR[cat]).remove(term)
+    return len(found)

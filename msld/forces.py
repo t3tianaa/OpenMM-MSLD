@@ -157,6 +157,95 @@ def add_scaled_torsions(system: mm.System, model) -> list[mm.CustomTorsionForce]
 
 
 # ---------------------------------------------------------------------
+# Impropers (CHARMM harmonic impropers -> CustomTorsionForce)
+# ---------------------------------------------------------------------
+# CHARMM force fields have harmonic improper dihedrals. ParmEd/OpenMM represent them in
+# a CustomTorsionForce, not the PeriodicTorsionForce that add_scaled_torsions handles. 
+# Urey-Bradley terms are a separate HarmonicBondForce and are already scaled by add_scaled_bonds.
+#
+# We cannot cleanly zero one torsion inside a generic CustomTorsionForce (we do not know
+# which parameter is the force constant), so instead we rebuild: read the force's energy
+# expression + parameters, drop the original force, and re-add its torsions grouped by
+# lambda signature - env terms unscaled, alchemical terms in a CustomTorsionForce whose
+# energy is lambda_prefix*(original). These custom forces expose analytic dU/dlambda.
+
+
+def add_scaled_impropers(system: mm.System, model) -> list[mm.CustomTorsionForce]:
+    """Block-scale alchemical CustomTorsionForce terms (CHARMM harmonic impropers).
+
+    Only forces that actually touch alchemical atoms are rebuilt, others are left as-is.
+    Returns the created (scaled + unscaled-env) forces.
+    """
+    created = []
+    # capture (index, force). OpenMM returns a fresh wrapper each call, so we must
+    # track the index - `getForce(i) is f` never matches, even for the same force.
+    # Skip MSLD-named CustomTorsionForces: add_scaled_torsions turns PeriodicTorsionForce
+    # into CustomTorsionForce (MSLDTorsion_*), and those are already lambda-scaled - we
+    # must not scale them again.
+    originals = [(i, system.getForce(i)) for i in range(system.getNumForces())
+                 if isinstance(system.getForce(i), mm.CustomTorsionForce)
+                 and not (system.getForce(i).getName() or "").startswith("MSLD")]
+    remove_indices = []
+    for idx, f in originals:
+        # classify every torsion; skip this force entirely if none are alchemical
+        groups = defaultdict(list)
+        has_alch = False
+        for i in range(f.getNumTorsions()):
+            p = f.getTorsionParameters(i)
+            a1, a2, a3, a4 = p[0], p[1], p[2], p[3]
+            params = list(p[4])
+            sig = tuple(model.classify_bonded([a1, a2, a3, a4]))
+            groups[sig].append((a1, a2, a3, a4, params))
+            if sig:
+                has_alch = True
+        if not has_alch:
+            continue
+
+        expr = f.getEnergyFunction()
+        per_params = [f.getPerTorsionParameterName(k)
+                      for k in range(f.getNumPerTorsionParameters())]
+        gparams = [(f.getGlobalParameterName(g), f.getGlobalParameterDefaultValue(g))
+                   for g in range(f.getNumGlobalParameters())]
+        pbc = f.usesPeriodicBoundaryConditions()
+        main, sep, tail = expr.partition(";")     # scale only the value, not the a=b defs
+
+        def _make(prefix: str, name: str):
+            e = f"({prefix})*({main}){sep}{tail}" if prefix else expr
+            g = mm.CustomTorsionForce(e)
+            g.setName(name)
+            for pn in per_params:
+                g.addPerTorsionParameter(pn)
+            for gn, dv in gparams:
+                g.addGlobalParameter(gn, dv)
+            g.setUsesPeriodicBoundaryConditions(pbc)
+            return g
+
+        base_name = f.getName() or "Improper"
+        if groups.get(()):                         # env impropers -> unscaled copy
+            g = _make("", base_name + "_env")
+            for a1, a2, a3, a4, params in groups[()]:
+                g.addTorsion(a1, a2, a3, a4, params)
+            system.addForce(g)
+            created.append(g)
+        for sig, tors in groups.items():           # alchemical -> lambda-scaled
+            if not sig:
+                continue
+            g = _make(_lambda_prefix(sig), "MSLDImproper_" + "_".join(map(str, sig)))
+            _register_lambdas(g, sig)
+            for a1, a2, a3, a4, params in tors:
+                g.addTorsion(a1, a2, a3, a4, params)
+            system.addForce(g)
+            created.append(g)
+        remove_indices.append(idx)
+
+    # drop the originals by index. New forces were appended at the end, so the original
+    # indices are still valid; remove them high-to-low so earlier indices don't shift.
+    for idx in sorted(remove_indices, reverse=True):
+        system.removeForce(idx)
+    return created
+
+
+# ---------------------------------------------------------------------
 # Electrostatics + PME
 # ---------------------------------------------------------------------
 # Scale each alchemical atom's charge linearly with lambda:
