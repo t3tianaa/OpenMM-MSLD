@@ -5,10 +5,11 @@
 """
 import os
 import sys
+import warnings
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from msld.prep import (ManualMapper, assert_iso_charge, renormalize_charges,
-                       variant_net_charges)
+from msld.prep import (ManualMapper, assert_iso_charge, average_env_charges,
+                       renormalize_charges, variant_net_charges)
 
 
 def _mapping(buffer=None):
@@ -112,6 +113,50 @@ def test_buffer_not_implemented():
         assert False, "expected buffer NotImplementedError"
     except NotImplementedError as ex:
         assert "buffer" in str(ex)
+
+
+# average env charges across variants (Amber backbone case)
+def test_average_env_identical_is_noop():
+    # CHARMM-like: every variant has the same backbone charges -> average = same, silent
+    per_variant = [[-0.4157, 0.2719, 0.07], [-0.4157, 0.2719, 0.07]]
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        rep = average_env_charges(per_variant, labels=["N", "H", "CA"])
+    assert rep.averaged == [-0.4157, 0.2719, 0.07]
+    assert rep.differing == []
+    assert rep.max_spread < 1e-9
+    assert len(caught) == 0                       # no message when nothing differs
+
+
+def test_average_env_differing_takes_mean_and_warns():
+    # Amber-like: CA differs (0.10 vs -0.04), rest identical
+    per_variant = [[-0.4157, 0.2719, 0.10], [-0.4157, 0.2719, -0.04]]
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        rep = average_env_charges(per_variant, labels=["N", "H", "CA"])
+    assert abs(rep.averaged[2] - 0.03) < 1e-12    # (0.10 + -0.04)/2
+    assert rep.averaged[0] == -0.4157             # unchanged atoms untouched
+    assert len(rep.differing) == 1 and rep.differing[0][0] == "CA"
+    assert abs(rep.max_spread - 0.14) < 1e-12
+    assert len(caught) == 1 and "average" in str(caught[0].message)
+
+
+def test_average_env_refuses_large_spread():
+    # a huge spread -> not a shared atom (backbone mutation) -> refuse
+    per_variant = [[0.0, 0.1], [0.0, 1.0]]
+    try:
+        average_env_charges(per_variant, labels=["N", "X"])
+        assert False, "expected refuse on large spread"
+    except ValueError as ex:
+        assert "not really a shared atom" in str(ex)
+
+
+def test_average_env_length_mismatch_raises():
+    try:
+        average_env_charges([[0.1, 0.2], [0.1]])
+        assert False, "expected length-mismatch error"
+    except ValueError as ex:
+        assert "correspond" in str(ex)
 
 
 if __name__ == "__main__":
