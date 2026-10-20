@@ -1,8 +1,8 @@
 """
 Drives theta (lambda) together with the atoms on top of an OpenMM Context
-whose System was built by build_msld_system(). It is a python driver
-(not a pure CustomIntegrator) because electrostatics dU/dlambda is only available
-by finite difference.
+whose System was built by scale_msld_system(). It is a python driver
+(not a pure CustomIntegrator) because the NonbondedForce electrostatics
+dU/dlambda is only available by finite difference.
 
 Integrator: one combined VRORV / BAOAB Langevin step over both the atoms and the
 theta variables. OpenMM is used only to evaluate forces/energies.
@@ -10,11 +10,17 @@ theta variables. OpenMM is used only to evaluate forces/energies.
 Per force evaluation:
   1. project theta -> lambda (softmax per site), push lambdas to the Context
   2. atom force  = -dU/dx           (OpenMM getForces, at the current lambda)
-  3. theta force = -dU/dtheta       (chain rule, dU/dlambda by finite difference)
+  3. theta force = -dU/dtheta       (chain rule from dU/dlambda)
 
-Limitations: no holonomic constraints (SHAKE), and the finite-difference theta 
-force costs O(n_blocks) energy evaluations per step.
-Both are removed by the plugin.
+dU/dlambda is a hybrid: bonded + LJ + within-block correction come back analytically
+(addEnergyParameterDerivative, one getState merged with the atom forces); the
+remainder -- electrostatics (which OpenMM cannot expose), the biases, and anything
+injected -- is finite-differenced over the FD_FORCE_GROUP energy alone. builder.py
+splits the forces into those two groups.
+
+Limitations: no holonomic constraints (SHAKE), and the remainder finite difference
+still costs O(n_blocks) group-energy evaluations per step (electrostatics dominates).
+Both are removed by the plugin (analytic PME charge-derivative).
 """
 from __future__ import annotations
 
@@ -23,7 +29,7 @@ import math
 import numpy as np
 from openmm import unit
 
-from .builder import set_lambdas
+from .builder import set_lambdas, FD_FORCE_GROUP
 from .forces import lambda_name
 
 _NM = unit.nanometer
@@ -81,6 +87,15 @@ class LambdaDynamics:
         self.has_constraints = system.getNumConstraints() > 0
         self.constraint_tol = 1e-6
 
+        # dU/dlambda = analytic part (bonded + LJ + within-block correction, via
+        # addEnergyParameterDerivative) + a finite difference of the FD_FORCE_GROUP remainder
+        # (electrostatics + biases + anything injected). scale_msld_system put the analytic
+        # forces in ANALYTIC_FORCE_GROUP and left this remainder in group 0. If group 0 is
+        # empty (everything analytic), the FD is skipped.
+        self._fd_group = FD_FORCE_GROUP
+        self._has_fd = any(system.getForce(i).getForceGroup() == FD_FORCE_GROUP
+                           for i in range(system.getNumForces()))
+
         self._F = None
         self.project()
 
@@ -99,28 +114,75 @@ class LambdaDynamics:
     def potential_energy(self):
         return self.context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(_KJ)
 
+    def _fd_energy(self):
+        """Energy of ONLY the finite-difference force group (electrostatics + biases + injected)."""
+        return (self.context.getState(getEnergy=True, groups={self._fd_group})
+                .getPotentialEnergy().value_in_unit(_KJ))
+
+    # -----------------------------------------------------------
+    # minimization
+    # -----------------------------------------------------------
+    def minimize(self, max_iterations=0, tolerance=10.0):
+        """Energy-minimize the ATOMS at the current lambda, then reload the relaxed positions.
+
+        Freshly grafted / freshly solvated hybrids start with steric clashes (alternate side
+        chains placed by backbone alignment, new water). Running dynamics straight from that state
+        blows up on step 1, so relax the geometry first.
+
+        Only the atomic coordinates move: theta (and thus lambda) are held fixed at the current
+        projection while OpenMM's LocalEnergyMinimizer runs on the *lambda-scaled* energy surface.
+        This MUST be called after the System has been lambda-scaled (scale_system adds the same-site
+        block exclusions); minimizing the unscaled System would let the mutually-exclusive variant
+        side chains -- which deliberately overlap in space -- clash. `tolerance` is kJ/mol/nm;
+        `max_iterations=0` runs to convergence. Returns self.
+        """
+        from openmm import LocalEnergyMinimizer
+        self.project()                                  # push current lambda to the Context
+        self.context.setPositions(self.x * _NM)
+        LocalEnergyMinimizer.minimize(self.context, tolerance * _F_UNIT, max_iterations)
+        self.x = np.array(self.context.getState(getPositions=True)
+                          .getPositions(asNumpy=True).value_in_unit(_NM))
+        self._F = None                                  # cached force is stale -> recompute
+        return self
+
     # -----------------------------------------------------------
     # gradients
     # -----------------------------------------------------------
-    def dUdlambda(self):
-        """Fcomputes dU/dlambda_b for each block by finite difference of the total energy."""
+    def dUdlambda(self, analytic_deriv=None):
+        """dU/dlambda_b for each block.
+
+        Analytic part (bonded + LJ + within-block correction) comes straight from OpenMM's
+        addEnergyParameterDerivative; the remainder -- electrostatics (charge offsets + PME
+        reciprocal + 1-4 offsets, which OpenMM cannot expose), the biases, and anything a caller
+        injected -- is a central finite difference of the FD_FORCE_GROUP energy ALONE.
+
+        `analytic_deriv` lets the caller pass a dict of dU/dparam it already fetched alongside
+        the atom forces (one merged getState), avoiding a second energy evaluation.
+        """
         lam = self.project()
+        if analytic_deriv is None:
+            analytic_deriv = self.context.getState(
+                getParameterDerivatives=True).getEnergyParameterDerivatives()
         d = [0.0] * self.model.n_blocks
         present = self.context.getParameters()
         for b in self.dof:
             name = lambda_name(b)
             if name not in present:          # no force uses this lambda -> dU/dlambda = 0
                 continue
-            base = self.context.getParameter(name)
-            self.context.setParameter(name, base + self.h); ep = self.potential_energy()
-            self.context.setParameter(name, base - self.h); em = self.potential_energy()
-            self.context.setParameter(name, base)
-            d[b] = (ep - em) / (2.0 * self.h)
+            a = analytic_deriv[name] if name in analytic_deriv else 0.0
+            e = 0.0
+            if self._has_fd:                 # finite-difference the non-analytic remainder only
+                base = self.context.getParameter(name)
+                self.context.setParameter(name, base + self.h); ep = self._fd_energy()
+                self.context.setParameter(name, base - self.h); em = self._fd_energy()
+                self.context.setParameter(name, base)
+                e = (ep - em) / (2.0 * self.h)
+            d[b] = a + e
         return d, lam
 
-    def dUdtheta(self):
+    def dUdtheta(self, analytic_deriv=None):
         """Softmax chain rule: dU/dtheta_i from dU/dlambda (per site)."""
-        d, lam = self.dUdlambda()
+        d, lam = self.dUdlambda(analytic_deriv)
         g = [0.0] * self.model.n_blocks
         fnex = self.model.fnex
         for s in range(1, self.model.n_sites):
@@ -138,9 +200,12 @@ class LambdaDynamics:
     def _forces(self):
         """Physical forces (= -gradient) on atoms and theta at the current state."""
         self.context.setPositions(self.x * _NM)     # sync atom positions into the Context
-        g = self.dUdtheta()                         # sets lambda, returns dU/dtheta
-        fx = np.array(self.context.getState(getForces=True)     # atom forces = −dU/dx, at the current lambda
-                      .getForces(asNumpy=True).value_in_unit(_F_UNIT))
+        self.project()                              # push current lambda to the Context
+        # one evaluation gives BOTH the atom forces and the analytic dU/dlambda parts
+        st = self.context.getState(getForces=True, getParameterDerivatives=True)
+        fx = np.array(st.getForces(asNumpy=True).value_in_unit(_F_UNIT))   # atom forces = −dU/dx
+        deriv = st.getEnergyParameterDerivatives()  # analytic dU/dlambda (bonded+LJ+within-block+bias)
+        g = self.dUdtheta(deriv)                    # theta force (+ electrostatics-only FD inside)
         fth = {b: -g[b] for b in self.dof}          # theta force = -dU/dtheta
         return fx, fth
 
@@ -204,6 +269,73 @@ class LambdaDynamics:
             for b in self.dof:
                 self.vtheta[b] += hdt * fth[b] / self.mass[b]
         self.project()
+
+    # -----------------------------------------------------------
+    # run with reporters
+    # -----------------------------------------------------------
+    def run(self, nsteps, *, minimize=False, metrics=None, metrics_every: int = 100, mapping=None,
+            trajectory=None, trajectory_every: int = 1000, structure=None, reporters=()):
+        """Integrate `nsteps`, saving metrics / a trajectory at their OWN step intervals.
+
+        Just name the outputs and their intervals — the files are opened and closed here, so no
+        `with` is needed:
+
+            dyn.run(10_000, minimize=True,
+                            metrics="out/metrics.csv", metrics_every=100, mapping=bundle.mapping,
+                            trajectory="out/traj.dcd", trajectory_every=500, structure=bundle.structure)
+
+          minimize   : energy-minimize the atoms once before stepping (see `minimize`); True runs to
+                       convergence, an int caps the iterations. Do this for any freshly built /
+                       solvated hybrid or dynamics will blow up on step 1.
+          metrics    : CSV path; every `metrics_every` steps append per-block lambda + energy
+                       (`mapping` names the columns; optional).
+          trajectory : DCD path; every `trajectory_every` steps append the atom coordinates
+                       (needs `structure`, the hybrid Structure, for the topology; also writes a
+                       companion `<stem>.pdb`).
+          reporters  : extra custom reporters, each with `.every`, `.report(dyn, step)`, `.close()`.
+
+        Every reporter carries its own interval; `run` steps only as finely as needed (the gcd of
+        the intervals) and reports each one when the cumulative step is a multiple of its `every`.
+        With no outputs this is just `step(nsteps)`. Returns self.
+        """
+        import math
+
+        if minimize:
+            self.minimize(max_iterations=(0 if minimize is True else int(minimize)))
+
+        reps = list(reporters)
+        if metrics is not None:
+            from .io import LambdaTrajectoryWriter
+            reps.append(LambdaTrajectoryWriter(metrics, self.model, every=metrics_every,
+                                               mapping=mapping))
+        if trajectory is not None:
+            if structure is None:
+                raise ValueError("trajectory= needs structure= (the hybrid Structure) for its topology")
+            from .io import TrajectoryWriter
+            reps.append(TrajectoryWriter(trajectory, structure, every=trajectory_every,
+                                         mapping=mapping))
+
+        if not reps:
+            self.step(nsteps)
+            return self
+
+        intervals = [r.every for r in reps if getattr(r, "every", 0)]
+        stride = math.gcd(*intervals, nsteps) if intervals else nsteps
+        done = 0
+        try:
+            while done < nsteps:
+                chunk = min(stride, nsteps - done)
+                self.step(chunk)
+                done += chunk
+                for r in reps:
+                    if getattr(r, "every", 0) and done % r.every == 0:
+                        r.report(self, done)
+        finally:
+            for r in reps:
+                close = getattr(r, "close", None)
+                if callable(close):
+                    close()
+        return self
 
     # -----------------------------------------------------------
     # diagnostics

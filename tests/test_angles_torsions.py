@@ -15,7 +15,7 @@ from openmm import unit, Vec3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from msld.model import MSLDModel
-from msld.builder import build_msld_system, set_lambdas
+from msld.builder import scale_msld_system, set_lambdas
 
 _REF = mm.Platform.getPlatform("Reference")
 
@@ -33,7 +33,7 @@ def _energy_and_derivs(system, positions, lambdas):
 
 def _check(system, positions, model, lam_partial, factor, deriv_checks):
     """Build, verify lambda=1 gives nonzero base E1, and factor*E1 at lam_partial."""
-    build_msld_system(system, model)
+    scale_msld_system(system, model)
     ones = [1.0] * model.n_blocks
     e1, _ = _energy_and_derivs(system, positions, ones)
     assert e1 > 1e-6, f"base term energy ~0 ({e1}); pick geometry with nonzero E"

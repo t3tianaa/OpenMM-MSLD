@@ -14,7 +14,7 @@ from msld.prep import (ManualMapper, assert_iso_charge, average_env_charges,
 
 def _mapping(buffer=None):
     return ManualMapper(env_atoms={0, 1}, blocks={"A": {2, 3}, "B": {4}},
-                        buffer_atoms=(buffer or set())).build_mapping()
+                        buffer_atoms=(buffer or set())).get_mapping()
 
 
 # net charges

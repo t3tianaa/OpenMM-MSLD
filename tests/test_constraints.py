@@ -12,7 +12,7 @@ from openmm import unit, Vec3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from msld.model import MSLDModel
-from msld.builder import build_msld_system
+from msld.builder import scale_msld_system
 from msld.integrator import LambdaDynamics
 
 _REF = mm.Platform.getPlatform("Reference")
@@ -32,7 +32,7 @@ def test_constraint_kept_rigid():
     m.add_block(site=1, atoms=[2], theta0=0.2)
     m.add_block(site=1, atoms=[3], theta0=-0.1)
     m.finalize()
-    build_msld_system(system, m)
+    scale_msld_system(system, m)
 
     pos = [Vec3(0, 0, 0), Vec3(_D0, 0, 0), Vec3(0.10, 0.10, 0), Vec3(0.20, 0.20, 0)] * unit.nanometer
     ctx = mm.Context(system, mm.VerletIntegrator(0.001), _REF)

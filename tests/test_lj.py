@@ -11,7 +11,7 @@ from openmm import unit, Vec3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from msld.model import MSLDModel
-from msld.builder import build_msld_system, set_lambdas
+from msld.builder import scale_msld_system, set_lambdas
 
 _REF = mm.Platform.getPlatform("Reference")
 _SIG = 0.3
@@ -49,7 +49,7 @@ def _nb_lj(epsilons, method=mm.NonbondedForce.NoCutoff, box=None, cutoff=0.8):
 
 
 def _check(system, pos, model, lam_partial, factor, deriv_checks):
-    build_msld_system(system, model)
+    scale_msld_system(system, model)
     e1, _ = _energy_and_derivs(system, pos, [1.0] * model.n_blocks)
     assert abs(e1) > 1e-6, f"base LJ ~0 ({e1})"
     ep, d = _energy_and_derivs(system, pos, lam_partial)
@@ -93,7 +93,7 @@ def test_lj_same_site_excluded():
     m.add_block(site=1, atoms=[0])
     m.add_block(site=1, atoms=[1])
     m.finalize()
-    build_msld_system(system, m)
+    scale_msld_system(system, m)
     e, _ = _energy_and_derivs(system, pos, [1.0, 1.0, 1.0])
     assert abs(e) < 1e-6, e          # only LJ pair was same-site -> removed
 
@@ -110,7 +110,7 @@ def _recovers_base(method, box):
     m.add_block(site=2, atoms=[4])
     m.add_block(site=2, atoms=[5])
     m.finalize()
-    build_msld_system(system, m)
+    scale_msld_system(system, m)
     e_one, _ = _energy_and_derivs(system, pos, [1.0] * m.n_blocks)
     assert abs(e_one - e_base) < 1e-5 * max(1.0, abs(e_base)), (method, e_one, e_base)
 

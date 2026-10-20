@@ -8,11 +8,11 @@ import sys
 
 import numpy as np
 import openmm as mm
-from openmm import unit, Vec3
+from openmm import unit
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from msld.model import MSLDModel
-from msld.builder import build_msld_system
+from msld.builder import scale_msld_system
 
 _REF = mm.Platform.getPlatform("Reference")
 
@@ -30,7 +30,7 @@ def test_atom_restraint_matches_centroid_formula():
     m = MSLDModel(4)
     m.add_atom_restraint(group)
     m.finalize()
-    info = build_msld_system(system, m)
+    info = scale_msld_system(system, m)
     assert info["atom_restraint_force"] == "MSLDAtomRestraint"
 
     ctx = mm.Context(system, mm.VerletIntegrator(0.001), _REF)

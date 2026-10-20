@@ -12,7 +12,7 @@ from openmm import unit, Vec3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from msld.model import MSLDModel
-from msld.builder import build_msld_system, set_lambdas
+from msld.builder import scale_msld_system, set_lambdas
 
 _REF = mm.Platform.getPlatform("Reference")
 
@@ -39,7 +39,7 @@ def test_fixed_bias():
     m.add_block(site=1, atoms=[1], lambda_bias=2.0)
     m.add_block(site=1, atoms=[2])
     m.finalize()
-    build_msld_system(system, m)
+    scale_msld_system(system, m)
     assert abs(_energy(system, pos, [1.0, 0.4, 0.6]) - 2.0 * 0.4) < 1e-9
     assert abs(_energy(system, pos, [1.0, 1.0, 0.0]) - 2.0 * 1.0) < 1e-9
 
@@ -53,7 +53,7 @@ def _two_site_bias(bias_type, l0, k):
     m.add_block(site=2, atoms=[4])
     m.add_variable_bias(1, 3, bias_type, l0, k, 0)   # bias between block1 and block3
     m.finalize()
-    build_msld_system(system, m)
+    scale_msld_system(system, m)
     return _energy(system, pos, [1.0, 0.4, 1.0, 0.6, 1.0])   # lambda1=0.4, lambda3=0.6
 
 
@@ -86,7 +86,7 @@ def test_removescaling_bond():
         m.add_block(site=1, atoms=[2])
         m.scale_bond = scale
         m.finalize()
-        info = build_msld_system(system, m)
+        info = scale_msld_system(system, m)
         pos = [Vec3(0, 0, 0), Vec3(0.2, 0, 0), Vec3(1.0, 0, 0)] * unit.nanometer
         return info, _energy(system, pos, [1.0, 0.3, 0.7]), _energy(system, pos, [1.0, 1.0, 0.0])
 

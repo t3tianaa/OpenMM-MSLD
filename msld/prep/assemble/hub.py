@@ -1,0 +1,118 @@
+"""HybridSystemAssembler.
+
+One object that runs the assembly substeps in order and returns a bundle:
+
+    2.1 HybridStructureBuilder    graft variant blocks onto the env  (structure + mapping)
+    2.2 ChargeRenormalization     average env + renormalize blocks to integer net (in place)
+    2.3 solvate (optional)        water-box overlay + neutralizing ions   
+    2.4 HybridSystemBuilder       hybrid Structure -> plain OpenMM System
+
+    OUTPUT: HybridSystemBundle { structure, system, mapping }  (+ optional save)
+
+The hub owns the swappable pieces (mapper / aligner / renormalizer / system_builder) so the
+whole pipeline is configured in one place. It ends exactly where the engine begins: the bundle
+carries the two objects the engine uses -- a plain System and (via the blueprint) an MSLDModel.
+"""
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+
+import openmm as mm
+
+from ..mapping.core import HybridBlueprint
+from .structure import HybridStructureBuilder
+from .charges import SpreadRenormalizer
+from .system import HybridSystemBuilder, is_solvated, strip_solvent
+
+
+@dataclass
+class HybridSystemBundle:
+    """The product of assembly: a plain System + its hybrid Structure + the blueprint."""
+    structure: object                       # pmd.Structure (solute [+ solvent], renormalized)
+    system: object                          # plain OpenMM System (not yet lambda-scaled)
+    mapping: HybridBlueprint                # combined-index CoreMapping per site
+    reports: dict = field(default_factory=dict)   # per-site RenormReport, solvation info, ...
+
+    def to_model(self, **kw):
+        """The finalized MSLDModel for the engine (model_from_mappings under the hood)."""
+        return self.mapping.to_model(**kw)
+
+    def save(self, out_dir, *, prefix="hybrid", hyb_resname="HYB") -> dict:
+        """Write the hybrid system's artifacts. Returns the paths dict.
+
+          {prefix}_system.xml    OpenMM System (the plain, not-yet-lambda-scaled System)
+          {prefix}_mapping.json  the HybridBlueprint (which atoms are env / each block, per site)
+          {prefix}_topology.pdb  the topology with each mutated site MERGED into ONE residue
+                                 (`hyb_resname`), on the site's chain, with CONECT (a novel residue)
+          {prefix}_residue.xml   a self-contained OpenMM forcefield XML for the hybrid residue(s)
+        """
+        from .hybrid_output import write_hybrid_pdb, write_hybrid_ff_xml
+        os.makedirs(out_dir, exist_ok=True)
+        paths = {
+            "system": os.path.join(out_dir, f"{prefix}_system.xml"),
+            "mapping": os.path.join(out_dir, f"{prefix}_mapping.json"),
+            "topology": os.path.join(out_dir, f"{prefix}_topology.pdb"),
+            "residue_ff": os.path.join(out_dir, f"{prefix}_residue.xml"),
+        }
+        with open(paths["system"], "w") as f:
+            f.write(mm.XmlSerializer.serialize(self.system))
+        with open(paths["mapping"], "w") as f:
+            f.write(self.mapping.to_json(indent=2))
+        write_hybrid_pdb(self.structure, self.mapping, paths["topology"], hyb_resname=hyb_resname)
+        write_hybrid_ff_xml(self.structure, self.mapping, paths["residue_ff"], hyb_resname=hyb_resname)
+        return paths
+
+
+class HybridSystemAssembler:
+    """Run structure -> charges -> (solvate) -> system, and return a HybridSystemBundle."""
+
+    def __init__(self, *, mapper=None, aligner=None, renormalizer=None, system_builder=None):
+        self.structure_builder = HybridStructureBuilder(mapper=mapper, aligner=aligner)
+        self.renormalizer = renormalizer if renormalizer is not None else SpreadRenormalizer()
+        self.system_builder = system_builder or HybridSystemBuilder()
+
+    def assemble(self, env_structure, sites, *, renormalize=True,
+                 solvate=False, solvate_kwargs=None,
+                 restrip_solvent=True) -> HybridSystemBundle:
+        """Assemble the hybrid system.
+
+        renormalize : run ChargeRenormalization (env averaging + block renorm) per site.
+        solvate     : overlay a water box + neutralizing ions after charge renorm (§16.5).
+        solvate_kwargs : passed to prep.solvate.solvate (padding, water_ff, ion_conc, ...).
+        restrip_solvent : if the input env already carries water/ions, strip it before
+                          assembly (assembly runs on a DRY solute).
+        """
+        reports: dict = {}
+
+        # a pre-solvated env is stripped so the graft happens on a dry solute (§16.5)
+        if restrip_solvent and is_solvated(env_structure):
+            env_structure = strip_solvent(env_structure)
+            reports["stripped_input_solvent"] = True
+
+        # 2.1 structure
+        hres = self.structure_builder.build(env_structure, sites)
+        structure = hres.structure
+
+        # 2.2 charges (per site; each site's own variants drive the env averaging)
+        if renormalize:
+            reports["renorm"] = {}
+            for spec, mapping in zip(sites, hres.site_mappings):
+                reports["renorm"][spec.reference_name] = self.renormalizer.apply(
+                    structure, mapping, variants=spec.variants)
+
+        # 2.3 solvate (optional). Solute atoms keep their indices (solute is added first), so
+        # the site mappings stay valid; only the total atom count grows.
+        if solvate:
+            from .solvate import solvate as _solvate
+            sres = _solvate(structure, **(solvate_kwargs or {}))
+            structure = sres.structure
+            reports["solvate"] = sres
+
+        blueprint = HybridBlueprint(n_atoms=len(structure.atoms),
+                                    sites=hres.site_mappings).validate()
+
+        # 2.4 system
+        system = self.system_builder.build(structure, blueprint)
+        return HybridSystemBundle(structure=structure, system=system,
+                                  mapping=blueprint, reports=reports)

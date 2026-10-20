@@ -12,7 +12,7 @@ from openmm import unit, Vec3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from msld.model import MSLDModel
-from msld.builder import build_msld_system, set_lambdas
+from msld.builder import scale_msld_system, set_lambdas
 
 _REF = mm.Platform.getPlatform("Reference")
 
@@ -50,7 +50,7 @@ def test_14_single_lambda():
     m.add_block(site=1, atoms=[1])                 # (0,1) -> env<->block1 -> single lambda1
     m.add_block(site=1, atoms=[2])
     m.finalize()
-    build_msld_system(system, m)
+    scale_msld_system(system, m)
 
     e1 = _energy(system, pos, [1.0, 1.0, 1.0])
     assert abs(e1) > 1e-6, e1
@@ -83,7 +83,7 @@ def test_14_recovers_base():
     m.add_block(site=1, atoms=[4, 5])
     m.add_block(site=1, atoms=[6])
     m.finalize()
-    build_msld_system(system, m)
+    scale_msld_system(system, m)
 
     e_one = _energy(system, pos, [1.0] * m.n_blocks)
     assert abs(e_one - e_base) < 1e-5 * max(1.0, abs(e_base)), (e_one, e_base)

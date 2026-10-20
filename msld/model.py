@@ -65,6 +65,9 @@ class MSLDModel:
         self.scale_bond = True
         self.scale_angle = True
         self.scale_torsion = True
+        # ALF: when True, scale_system builds a TUNABLE fixed-bias term for every alchemical block
+        # (even at coefficient 0), so alf.flatten can retune the biases live (see msld/alf.py).
+        self.bias_flattening = False
         # atom restraints (CATS): keep each listed group near its own centroid.
         self.atom_restraints: list[list[int]] = []
         self.k_restraint = 24769.0        # kJ/mol/nm^2 (BLaDE default 59.2 kcal/mol/A^2)
@@ -177,6 +180,16 @@ class MSLDModel:
             for b, wb in zip(js, w):
                 lam[b] = wb / z
         return lam
+
+    def scale_system(self, system, check_unhandled: bool = True) -> dict:
+        """Apply MSLD block-scaling to `system` in place; return the info dict.
+
+        The method form of the engine entry point (see builder.scale_msld_system). The model
+        must be finalized. Imported lazily so importing the data model does not pull in
+        OpenMM/forces.
+        """
+        from .builder import scale_msld_system
+        return scale_msld_system(system, self, check_unhandled=check_unhandled)
 
     @property
     def n_blocks(self) -> int:

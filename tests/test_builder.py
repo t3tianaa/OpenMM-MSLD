@@ -22,7 +22,7 @@ from openmm import unit, Vec3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from msld.model import MSLDModel
-from msld.builder import build_msld_system, set_lambdas
+from msld.builder import scale_msld_system, set_lambdas
 
 K = 1000.0          # kJ/mol/nm^2
 R0 = 0.1            # nm
@@ -79,14 +79,14 @@ def test_lambda_one_recovers_base():
     assert abs(e_base - (E01 + E02 + E24)) < 1e-6, e_base
 
     system = build_base()
-    build_msld_system(system, build_model())
+    scale_msld_system(system, build_model())
     e_scaled, _ = energy_and_derivs(system, [1, 1, 1, 1, 1])
     assert abs(e_scaled - e_base) < 1e-6, (e_scaled, e_base)
 
 
 def test_partial_lambda_value():
     system = build_base()
-    build_msld_system(system, build_model())
+    scale_msld_system(system, build_model())
     # blocks: [env, b1, b2, b3, b4] -> lambda1=0.4, lambda3=0.6
     lam = [1.0, 0.4, 1.0, 0.6, 1.0]
     e, _ = energy_and_derivs(system, lam)
@@ -96,7 +96,7 @@ def test_partial_lambda_value():
 
 def test_dUdlambda1():
     system = build_base()
-    build_msld_system(system, build_model())
+    scale_msld_system(system, build_model())
     lam = [1.0, 0.4, 1.0, 0.6, 1.0]
 
     # analytic: dU/dlambda1 = E02 + lambda3*E24

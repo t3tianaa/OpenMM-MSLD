@@ -13,7 +13,7 @@ from openmm import unit, Vec3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from msld.model import MSLDModel
-from msld.builder import build_msld_system, set_lambdas
+from msld.builder import scale_msld_system, set_lambdas
 
 _REF = mm.Platform.getPlatform("Reference")
 
@@ -53,7 +53,7 @@ def _fd_dUdlambda(system, pos, base_lams, block, h=1e-4):
 
 
 def _check(system, pos, model, lam_partial, factor, deriv_checks):
-    build_msld_system(system, model)
+    scale_msld_system(system, model)
     e1, _ = _energy_and_derivs(system, pos, [1.0] * model.n_blocks)
     assert abs(e1) > 1e-6, f"base pair energy ~0 ({e1})"
     ep, _ = _energy_and_derivs(system, pos, lam_partial)
@@ -102,7 +102,7 @@ def test_elec_same_site_excluded():
 
     e_pre, _ = _energy_and_derivs(system, pos)           # before build: big clash
     assert e_pre > 100.0, e_pre
-    build_msld_system(system, m)
+    scale_msld_system(system, m)
     e_post, _ = _energy_and_derivs(system, pos, [1.0, 1.0, 1.0])
     assert abs(e_post) < 1e-6, e_post                    # same-site pair removed
 
@@ -134,7 +134,7 @@ def test_elec_pme_recovers_base():
     m.add_block(site=2, atoms=[2])
     m.add_block(site=2, atoms=[3])
     m.finalize()
-    build_msld_system(system, m)
+    scale_msld_system(system, m)
     e_one, _ = _energy_and_derivs(system, pos, [1.0] * m.n_blocks)
     assert abs(e_one - e_base) < 1e-4 * max(1.0, abs(e_base)), (e_one, e_base)
 

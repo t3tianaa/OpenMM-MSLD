@@ -14,7 +14,7 @@ from openmm import app, unit, Vec3
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import parmed as pmd
 from msld.model import MSLDModel
-from msld.builder import build_msld_system, set_lambdas
+from msld.builder import scale_msld_system, set_lambdas
 
 _REF = mm.Platform.getPlatform("Reference")
 _KJ = unit.kilojoule_per_mole
@@ -31,7 +31,7 @@ def _energy_and_derivs(system, positions, lambdas):
 
 
 def _check(system, pos, model, lam_partial, factor, deriv_checks):
-    build_msld_system(system, model)
+    scale_msld_system(system, model)
     e1, _ = _energy_and_derivs(system, pos, [1.0] * model.n_blocks)
     assert e1 > 1e-6, f"base term energy ~0 ({e1})"
     ep, d = _energy_and_derivs(system, pos, lam_partial)
@@ -96,7 +96,7 @@ def test_env_improper_left_unscaled():
     m.add_block(site=1, atoms=[3])
     m.add_block(site=1, atoms=[4])
     m.finalize()
-    info = build_msld_system(system, m)
+    info = scale_msld_system(system, m)
     assert info["scaled_improper_forces"] == []     # nothing alchemical -> untouched
     assert any(isinstance(f, mm.CustomTorsionForce) for f in system.getForces())
 
@@ -164,7 +164,7 @@ def test_charmm_recovers_base():
     m.add_block(site=1, atoms=[3])
     m.add_block(site=1, atoms=[4])
     m.finalize()
-    info = build_msld_system(scaled, m)
+    info = scale_msld_system(scaled, m)
     assert info["scaled_improper_forces"], "improper should have been scaled"
     e_one = _energy_and_derivs(scaled, pos, [1.0, 1.0, 1.0])[0]
     assert abs(e_one - e_base) < 1e-4 * max(1.0, abs(e_base)), (e_one, e_base)

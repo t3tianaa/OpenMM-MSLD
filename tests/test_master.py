@@ -20,7 +20,7 @@ from openmm import unit, Vec3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from msld.model import MSLDModel
-from msld.builder import build_msld_system, set_lambdas
+from msld.builder import scale_msld_system, set_lambdas
 
 _REF = mm.Platform.getPlatform("Reference")
 _L = 3.0
@@ -90,7 +90,7 @@ def test_master_recovers_base_energy_and_forces():
     e_base, f_base = _energy_forces(base, pos)
 
     scaled, _ = make_system()
-    info = build_msld_system(scaled, make_model())
+    info = scale_msld_system(scaled, make_model())
     e_one, f_one = _energy_forces(scaled, pos, [1.0] * make_model().n_blocks)
 
     # energy
@@ -108,6 +108,18 @@ def test_master_recovers_base_energy_and_forces():
     print("  info:", {k: v for k, v in info.items()})
 
 
+def test_scale_system_method_matches_function():
+    # MSLDModel.scale_system(system) is the method form of scale_msld_system(system, model)
+    s1, pos = make_system()
+    scale_msld_system(s1, make_model())
+    s2, _ = make_system()
+    make_model().scale_system(s2)                       # the method
+    lams = [1.0, 0.5, 1.0]
+    e1, _ = _energy_forces(s1, pos, lams)
+    e2, _ = _energy_forces(s2, pos, lams)
+    assert abs(e1 - e2) < 1e-9, (e1, e2)
+
+
 def test_cmap_guard():
     # a CMAPTorsionForce touching an alchemical atom must be refused.
     system, _ = make_system()
@@ -116,7 +128,7 @@ def test_cmap_guard():
     cmap.addTorsion(idx, 3, 4, 2, 1, 1, 2, 3, 4)        # involves alchemical atom 3/4
     system.addForce(cmap)
     try:
-        build_msld_system(system, make_model())
+        scale_msld_system(system, make_model())
         assert False, "expected CMAP NotImplementedError"
     except NotImplementedError as ex:
         assert "CMAP" in str(ex)

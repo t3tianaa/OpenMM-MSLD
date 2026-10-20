@@ -14,7 +14,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from msld.prep import CoreMapping, ManualMapper, model_from_mappings
+from msld.prep import ManualMapper, model_from_mappings
 
 
 def _site1():
@@ -22,7 +22,7 @@ def _site1():
         env_atoms={0, 1, 2, 3},
         blocks={"A": {4, 5}, "B": {6}},
         attachments=[(1, 4), (1, 6)],          # both variants attach to env atom 1
-    ).build_mapping()
+    ).get_mapping()
 
 
 def _site2():
@@ -30,7 +30,7 @@ def _site2():
         env_atoms={0, 1, 2, 3},
         blocks={"C": {7, 8}, "D": {9, 10, 11}},
         attachments=[(2, 7), (2, 9)],
-    ).build_mapping()
+    ).get_mapping()
 
 
 # --------------------------------------------------------------------- CoreMapping
@@ -43,7 +43,7 @@ def test_mapping_validates_ok():
 
 def test_mapping_rejects_atom_in_two_blocks():
     try:
-        ManualMapper(env_atoms={0}, blocks={"A": {4, 5}, "B": {5, 6}}).build_mapping()
+        ManualMapper(env_atoms={0}, blocks={"A": {4, 5}, "B": {5, 6}}).get_mapping()
         assert False, "expected overlap error"
     except ValueError as ex:
         assert "two blocks" in str(ex)
@@ -51,7 +51,7 @@ def test_mapping_rejects_atom_in_two_blocks():
 
 def test_mapping_rejects_env_block_overlap():
     try:
-        ManualMapper(env_atoms={0, 4}, blocks={"A": {4, 5}, "B": {6}}).build_mapping()
+        ManualMapper(env_atoms={0, 4}, blocks={"A": {4, 5}, "B": {6}}).get_mapping()
         assert False, "expected env/block overlap error"
     except ValueError as ex:
         assert "environment" in str(ex)
@@ -60,7 +60,7 @@ def test_mapping_rejects_env_block_overlap():
 def test_mapping_rejects_bad_attachment():
     try:
         ManualMapper(env_atoms={0, 1}, blocks={"A": {4}, "B": {5}},
-                     attachments=[(1, 99)]).build_mapping()   # 99 is not a block atom
+                     attachments=[(1, 99)]).get_mapping()   # 99 is not a block atom
         assert False, "expected bad-attachment error"
     except ValueError as ex:
         assert "attachment" in str(ex)
@@ -69,7 +69,7 @@ def test_mapping_rejects_bad_attachment():
 def test_mapping_rejects_buffer_outside_env():
     try:
         ManualMapper(env_atoms={0, 1}, blocks={"A": {4}, "B": {5}},
-                     buffer_atoms={2}).build_mapping()        # 2 is not in env
+                     buffer_atoms={2}).get_mapping()        # 2 is not in env
         assert False, "expected buffer error"
     except ValueError as ex:
         assert "buffer" in str(ex)
@@ -120,7 +120,7 @@ def test_accepts_single_mapping_not_in_list():
 
 def test_model_rejects_single_nonfixed_block_site():
     # a site with only one (non-fixed) block violates MSLDModel.finalize()
-    one = ManualMapper(env_atoms={0}, blocks={"A": {4, 5}}).build_mapping()
+    one = ManualMapper(env_atoms={0}, blocks={"A": {4, 5}}).get_mapping()
     try:
         model_from_mappings(12, [one])
         assert False, "expected single-block site error"

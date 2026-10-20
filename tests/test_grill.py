@@ -19,7 +19,7 @@ from openmm import unit, Vec3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from msld.model import MSLDModel
-from msld.builder import build_msld_system, set_lambdas
+from msld.builder import scale_msld_system, set_lambdas
 
 _REF = mm.Platform.getPlatform("Reference")
 _KJ = unit.kilojoule_per_mole
@@ -77,7 +77,7 @@ def test_same_site_pme_matches_reference():
     m.add_block(site=1, atoms=[0])
     m.add_block(site=1, atoms=[1])
     m.finalize()
-    build_msld_system(built, m)
+    scale_msld_system(built, m)
 
     for x in (0.8, 1.1):                                  # two separations
         e_ref = _energy(ref, _pos(x))
@@ -123,7 +123,7 @@ def test_lambda_derivative_sums_across_forces():
     m.add_block(site=1, atoms=[3, 4])
     m.add_block(site=1, atoms=[5])
     m.finalize()
-    build_msld_system(system, m)
+    scale_msld_system(system, m)
 
     # lambda1 must be spread across several MSLD forces
     l1_forces = [f.getName() for f in system.getForces()

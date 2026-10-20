@@ -6,4 +6,7 @@ dependencies:
   - openmm
   - numpy
   - parmed          # prep/merge: combine per-variant topologies (Amber + CHARMM)
+  - scipy           # prep/solvate: KD-tree clash detection (cKDTree)
+  - rdkit           # prep/mapping/mcs: maximum-common-substructure for ligand variants
+  - openmmforcefields  # prep/ingest: GAFF/OpenFF params for SDF parts (ligands + non-standard/standard residues)
 

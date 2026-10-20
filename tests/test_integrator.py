@@ -15,7 +15,7 @@ from openmm import unit, Vec3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from msld.model import MSLDModel
-from msld.builder import build_msld_system
+from msld.builder import scale_msld_system
 from msld.integrator import LambdaDynamics
 
 _REF = mm.Platform.getPlatform("Reference")
@@ -48,7 +48,7 @@ def _model():
 def test_theta_force_matches_finite_difference():
     system, pos = _two_site_system()
     model = _model()
-    build_msld_system(system, model)
+    scale_msld_system(system, model)
 
     ctx = mm.Context(system, mm.VerletIntegrator(0.001), _REF)
     ctx.setPositions(pos)
@@ -82,7 +82,7 @@ def test_dynamics_runs_stably():
     # NaN), thermostat theta near the target T, and lambda must actually move.
     system, pos = _two_site_system()
     model = _model()
-    build_msld_system(system, model)
+    scale_msld_system(system, model)
     ctx = mm.Context(system, mm.VerletIntegrator(0.001), _REF)
     ctx.setPositions(pos)
     dyn = LambdaDynamics(ctx, model, temperature=300.0, timestep=0.001, seed=1)

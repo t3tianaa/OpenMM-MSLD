@@ -11,15 +11,14 @@ import os
 import sys
 
 import numpy as np
-import openmm as mm
-from openmm import app, unit, Vec3
+from openmm import app
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import parmed as pmd
 from msld.prep import (ManualMapper, model_from_mappings,
                        find_cross_variant_terms, assert_no_cross_variant_terms,
                        delete_cross_variant_terms)
-from msld.builder import build_msld_system
+from msld.builder import scale_msld_system
 
 
 def _structure(with_illegal_angle=True):
@@ -44,7 +43,7 @@ def _structure(with_illegal_angle=True):
 
 
 def _mapping():
-    return ManualMapper(env_atoms={0, 1, 2}, blocks={"A": {3}, "B": {4}}).build_mapping()
+    return ManualMapper(env_atoms={0, 1, 2}, blocks={"A": {3}, "B": {4}}).get_mapping()
 
 
 def test_find_and_assert_detect_cross_variant():
@@ -71,7 +70,7 @@ def test_clean_structure_has_none():
 def test_delete_then_build_succeeds():
     s = _structure(with_illegal_angle=True)
     m = _mapping()
-    # before: build_msld_system would reject the illegal angle
+    # before: scale_msld_system would reject the illegal angle
     n = delete_cross_variant_terms(s, m)
     assert n == 1
     assert find_cross_variant_terms(s, m) == []      # gone
@@ -80,7 +79,7 @@ def test_delete_then_build_succeeds():
     # now the engine accepts it
     system = s.createSystem(nonbondedMethod=app.NoCutoff)
     model = model_from_mappings(5, [m], add_restraints=False)
-    info = build_msld_system(system, model)           # must NOT raise
+    info = scale_msld_system(system, model)           # must NOT raise
     assert "scaled_bond_forces" in info
 
 
@@ -96,8 +95,8 @@ def test_cross_site_term_is_legal():
     s.bonds.append(pmd.Bond(s.atoms[1], s.atoms[3], type=bt))    # site1-blockA to site2-blockC
     s.coordinates = np.zeros((5, 3))
     # site 1: A={1}, B={2} ; site 2: C={3}, D={4}
-    site1 = ManualMapper(env_atoms={0}, blocks={"A": {1}, "B": {2}}).build_mapping()
-    site2 = ManualMapper(env_atoms={0}, blocks={"C": {3}, "D": {4}}).build_mapping()
+    site1 = ManualMapper(env_atoms={0}, blocks={"A": {1}, "B": {2}}).get_mapping()
+    site2 = ManualMapper(env_atoms={0}, blocks={"C": {3}, "D": {4}}).get_mapping()
     assert find_cross_variant_terms(s, [site1, site2]) == []      # different sites -> legal
 
 

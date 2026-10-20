@@ -25,6 +25,7 @@ Planned (nonbonded):
 """
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 
 import openmm as mm
@@ -35,6 +36,7 @@ _RAD = unit.radian
 _KJ = unit.kilojoule_per_mole
 _KJ_PER_NM2 = _KJ / _NM**2
 _KJ_PER_RAD2 = _KJ / _RAD**2
+_KE = 138.935456           # OpenMM ONE_4PI_EPS0 (kJ/mol * nm / e^2)
 
 
 # --------------------------------------------------------------------- 
@@ -278,25 +280,118 @@ def _existing_exception_pairs(nbf: mm.NonbondedForce) -> set:
     return pairs
 
 
-def add_same_site_exclusions(nbf: mm.NonbondedForce, model) -> int:
-    """Fully exclude every pair of atoms in different blocks of the SAME site
-    (mutually-exclusive overlapping substituents must never interact). Skips
-    pairs that already have an exception. Returns the number added."""
-    existing = _existing_exception_pairs(nbf)
-    added = 0
+def _same_site_pairs(model) -> set:
+    """All (a, c) atom pairs (a<c) whose atoms are in DIFFERENT blocks of the SAME site."""
+    pairs = set()
     for s in range(model.n_sites):
         blocks = model.blocks_in_site(s)
         for x in range(len(blocks)):
             for y in range(x + 1, len(blocks)):
                 for a in model.blocks[blocks[x]].atoms:
                     for c in model.blocks[blocks[y]].atoms:
-                        key = (min(a, c), max(a, c))
-                        if key in existing:
-                            continue
-                        nbf.addException(a, c, 0.0, 0.0, 0.0)  # full exclusion
-                        existing.add(key)
-                        added += 1
+                        pairs.add((min(a, c), max(a, c)))
+    return pairs
+
+
+def add_same_site_exclusions(nbf: mm.NonbondedForce, model) -> int:
+    """Fully exclude every pair of atoms in different blocks of the SAME site
+    (mutually-exclusive overlapping substituents must never interact). Skips
+    pairs that already have an exception. Returns the number added."""
+    existing = _existing_exception_pairs(nbf)
+    added = 0
+    for key in _same_site_pairs(model):
+        if key in existing:
+            continue
+        nbf.addException(key[0], key[1], 0.0, 0.0, 0.0)  # full exclusion
+        existing.add(key)
+        added += 1
     return added
+
+
+# ---------------------------------------------------------------------
+# Within-block electrostatics correction (match BLaDE: linear, not lambda^2)
+# ---------------------------------------------------------------------
+# The charge-offset method scales each alchemical atom's charge by lambda_b, so a pair
+# with BOTH atoms in block b gets lambda_b^2. That is correct for env<->block and
+# cross-site pairs, but WRONG for within-block full pairs (>=1-5 apart): BLaDE scales
+# them LINEARLY (nbdirect.cu uses lambda_b, not lambda_b^2, for same-block pairs). The
+# two atoms of one substituent are perfectly correlated (present together with weight
+# lambda_b), so their interaction should scale by lambda_b, not lambda_b^2.
+#
+# We cannot change the reciprocal (PME grid) per pair -- there BLaDE also gets lambda_b^2
+# (scaled charges), and so do we; that matches. We correct only the DIRECT/real space:
+# add (lambda_b - lambda_b^2) * [real-space Coulomb] for within-block full pairs. This is
+# zero at lambda_b=1 (so lambda=1 == base) and turns the direct-space scaling from
+# lambda_b^2 into lambda_b, exactly matching BLaDE. Only blocks with a 1-5+ internal pair
+# get a force (small substituents are unaffected).
+
+
+def add_within_block_elec_correction(system: mm.System, model) -> list:
+    """Correct within-block electrostatics from lambda^2 to lambda in the direct space.
+
+    MUST run BEFORE add_scaled_electrostatics (it reads the raw, unscaled charges).
+    """
+    created = []
+    nbfs = _forces_of_type(system, mm.NonbondedForce)
+    if not nbfs:
+        return created
+    nbf = nbfs[0]
+    npart = system.getNumParticles()
+    qraw = [nbf.getParticleParameters(i)[0].value_in_unit(_E) for i in range(npart)]
+    excl = sorted(_existing_exception_pairs(nbf))
+    method = nbf.getNonbondedMethod()
+
+    # direct-space Coulomb form + CustomNonbondedForce method
+    NB, CN = mm.NonbondedForce, mm.CustomNonbondedForce
+    if method == NB.NoCutoff:
+        screen, cn_method, cutoff = "1/r", CN.NoCutoff, None
+    elif method in (NB.PME, NB.Ewald, NB.LJPME, NB.CutoffPeriodic):
+        rc = nbf.getCutoffDistance().value_in_unit(_NM)
+        # OpenMM's default Ewald alpha:  (1/rc) * sqrt(-ln(2*tol))
+        alpha = math.sqrt(-math.log(2.0 * nbf.getEwaldErrorTolerance())) / rc
+        screen, cn_method, cutoff = f"erfc({alpha}*r)/r", CN.CutoffPeriodic, rc
+    else:  # CutoffNonPeriodic
+        rc = nbf.getCutoffDistance().value_in_unit(_NM)
+        screen, cn_method, cutoff = "1/r", CN.CutoffNonPeriodic, rc
+
+    excl_set = set(excl)
+    # Same-site cross-block pairs are excluded on the base NonbondedForce (and LJ forces) but by
+    # add_scaled_electrostatics, which runs AFTER this. The optimized platforms (CPU/OpenCL/CUDA)
+    # require every nonbonded force to carry the SAME exclusion set, so add them here too. They are
+    # cross-block and never in this force's within-block (atoms, atoms) group, so they contribute
+    # zero energy -- this only harmonizes the exclusion lists so those platforms accept the System.
+    same_site = _same_site_pairs(model)
+    for b in _alch_blocks(model):
+        atoms = list(model.blocks[b].atoms)
+        # only needed if the block has a 1-5+ internal pair (not 1-2/1-3/1-4 excluded);
+        # small/compact blocks whose pairs are all excluded need no correction force
+        has_full_pair = any(
+            (min(atoms[ii], atoms[jj]), max(atoms[ii], atoms[jj])) not in excl_set
+            for ii in range(len(atoms)) for jj in range(ii + 1, len(atoms)))
+        if not has_full_pair:
+            continue
+        lam = lambda_name(b)
+        f = mm.CustomNonbondedForce(
+            f"(lam - lam*lam)*{_KE}*q1*q2*({screen}); lam={lam}")
+        f.setName("MSLDWBElec_%d" % b)
+        f.addPerParticleParameter("q")
+        for qi in qraw:
+            f.addParticle([qi])
+        for a, c in excl:               # skip 1-2/1-3/1-4 (correct only 1-5+ full pairs)
+            f.addExclusion(a, c)
+        for a, c in same_site:          # match the base/LJ forces' exclusions (platform requirement)
+            if (a, c) not in excl_set:
+                f.addExclusion(a, c)
+        f.addGlobalParameter(lam, 1.0)
+        f.addEnergyParameterDerivative(lam)
+        f.setNonbondedMethod(cn_method)
+        if cutoff is not None:
+            f.setCutoffDistance(cutoff * _NM)
+        f.setUseLongRangeCorrection(False)
+        f.addInteractionGroup(atoms, atoms)
+        system.addForce(f)
+        created.append(f)
+    return created
 
 
 def add_scaled_electrostatics(system: mm.System, model) -> mm.NonbondedForce | None:
@@ -350,7 +445,7 @@ def add_scaled_electrostatics(system: mm.System, model) -> mm.NonbondedForce | N
 # never interact. Plain environment-environment LJ remains in NonbondedForce.
 # CustomNonbondedForce does expose dU/dlambda.
 #
-# Currently disabled (see DEFERRED.md): soft-core and the long-range dispersion
+# Currently disabled (see vault FEAT-031 Soft-core, EXP-005): soft-core and the long-range dispersion
 # correction.
 
 
@@ -441,7 +536,116 @@ def add_scaled_lj(system: mm.System, model) -> list[mm.CustomNonbondedForce]:
 
 
 # ---------------------------------------------------------------------
-# 1-4 exceptions  
+# CHARMM tabulated LJ (NBFIX) -> block-scaled
+# ---------------------------------------------------------------------
+# When a CHARMM system has NBFIX, ParmEd/OpenMM put ALL Lennard-Jones into a single
+# CustomNonbondedForce (energy uses per-type acoef/bcoef lookup tables), and ZERO the LJ
+# in the NonbondedForce. So add_scaled_lj (which reads the NonbondedForce) finds nothing.
+# We scale that tabulated force here, mirroring add_scaled_lj's grouping but reusing the
+# CHARMM energy expression + copying the acoef/bcoef tables (so NBFIX is preserved):
+#   base force  -> restricted to env<->env (interaction group)
+#   env<->block b, within block b  -> lambda_b copy
+#   block b<->c (different sites)   -> lambda_b*lambda_c copy
+#   same-site block pairs           -> excluded (never grouped)
+# Charges stay in the NonbondedForce (unaffected), so electrostatics is handled elsewhere.
+# No-op on Amber (LJ lives in the NonbondedForce, not a CustomNonbondedForce).
+
+
+def _copy_tabulated(fn):
+    """Deep-copy an OpenMM tabulated function (the acoef/bcoef LJ tables)."""
+    if isinstance(fn, mm.Discrete2DFunction):
+        xs, ys, vals = fn.getFunctionParameters()
+        return mm.Discrete2DFunction(xs, ys, vals)
+    if isinstance(fn, mm.Discrete1DFunction):
+        (vals,) = fn.getFunctionParameters()
+        return mm.Discrete1DFunction(vals)
+    raise NotImplementedError(f"cannot copy tabulated function of type {type(fn).__name__}")
+
+
+def add_scaled_charmm_lj(system: mm.System, model) -> list[mm.CustomNonbondedForce]:
+    """Block-scale a CHARMM-style tabulated LJ CustomNonbondedForce. No-op on Amber."""
+    created = []
+    alch_set = {a for a in range(model.n_atoms) if model.atom_block[a] != 0}
+    if not alch_set:
+        return created
+    alch = _alch_blocks(model)
+    env_atoms = [i for i in range(model.n_atoms) if model.atom_block[i] == 0]
+    block_atoms = {b: list(model.blocks[b].atoms) for b in alch}
+    npart = system.getNumParticles()
+
+    # non-MSLD CustomNonbondedForce spanning all particles = the system LJ force
+    originals = [system.getForce(i) for i in range(system.getNumForces())
+                 if isinstance(system.getForce(i), mm.CustomNonbondedForce)
+                 and not (system.getForce(i).getName() or "").startswith("MSLD")
+                 and system.getForce(i).getNumParticles() == npart]
+
+    for f in originals:
+        expr = f.getEnergyFunction()
+        per_params = [f.getPerParticleParameterName(k)
+                      for k in range(f.getNumPerParticleParameters())]
+        gparams = [(f.getGlobalParameterName(g), f.getGlobalParameterDefaultValue(g))
+                   for g in range(f.getNumGlobalParameters())]
+        pvals = [list(f.getParticleParameters(i)) for i in range(npart)]
+        tabs = [(f.getTabulatedFunctionName(t), f.getTabulatedFunction(t))
+                for t in range(f.getNumTabulatedFunctions())]
+        excls = [f.getExclusionParticles(k) for k in range(f.getNumExclusions())]
+        method = f.getNonbondedMethod()
+        cutoff = f.getCutoffDistance()
+        use_switch = f.getUseSwitchingFunction()
+        switch = f.getSwitchingDistance()
+        main, sep, tail = expr.partition(";")
+
+        def _make(sig_tuple, name):
+            g = mm.CustomNonbondedForce(f"({_lambda_prefix(sig_tuple)})*({main}){sep}{tail}")
+            g.setName(name)
+            for pn in per_params:
+                g.addPerParticleParameter(pn)
+            for gn, dv in gparams:
+                g.addGlobalParameter(gn, dv)
+            for tname, tfn in tabs:
+                g.addTabulatedFunction(tname, _copy_tabulated(tfn))
+            for pv in pvals:
+                g.addParticle(pv)
+            for a, c in excls:
+                g.addExclusion(a, c)
+            g.setNonbondedMethod(method)
+            if method != mm.CustomNonbondedForce.NoCutoff:
+                g.setCutoffDistance(cutoff)
+            if use_switch:
+                g.setUseSwitchingFunction(True)
+                g.setSwitchingDistance(switch)
+            g.setUseLongRangeCorrection(False)      # unsupported with interaction groups
+            _register_lambdas(g, sig_tuple)
+            return g
+
+        # single-lambda: env<->block b and within block b
+        for b in alch:
+            g = _make((b,), "MSLDCharmmLJ_%d" % b)
+            if env_atoms and block_atoms[b]:
+                g.addInteractionGroup(env_atoms, block_atoms[b])
+            if len(block_atoms[b]) >= 2:
+                g.addInteractionGroup(block_atoms[b], block_atoms[b])
+            system.addForce(g)
+            created.append(g)
+        # product-lambda: block b <-> block c, different sites only
+        for x in range(len(alch)):
+            for y in range(x + 1, len(alch)):
+                b, c = alch[x], alch[y]
+                if model.blocks[b].site == model.blocks[c].site:
+                    continue
+                g = _make((b, c), "MSLDCharmmLJ_%d_%d" % (b, c))
+                g.addInteractionGroup(block_atoms[b], block_atoms[c])
+                system.addForce(g)
+                created.append(g)
+
+        # restrict the base force to env<->env only (it keeps the NBFIX tables)
+        f.addInteractionGroup(env_atoms, env_atoms)
+        f.setUseLongRangeCorrection(False)
+    return created
+
+
+# ---------------------------------------------------------------------
+# 1-4 exceptions
 # ---------------------------------------------------------------------
 # An exception in NonbondedForce replaces the normal interaction for one specific
 # atom pair. Two kinds exist:
@@ -499,7 +703,7 @@ def add_scaled_14_exceptions(system: mm.System, model) -> int:
 # functions of the lambda globals -- no atom positions -- so we add ONE
 # CustomExternalForce on a dummy particle whose energy is the whole bias sum
 # written in terms of lambda{b}. Its atom force is zero (no x,y,z in the
-# expression); its dU/dlambda is picked up by the finite-difference gradient.
+# expression); its dU/dlambda is picked up by the finite-difference (group-0) gradient.
 #
 # Fixed bias : sum_b  bias_b * lambda_b            (linear)
 # Variable   : ALF coupling biases between two blocks i, j (BLaDE types):
@@ -508,37 +712,65 @@ def add_scaled_14_exceptions(system: mm.System, model) -> int:
 #     10 skew      : k * lj * (1 - exp(l0 * li))
 
 
-def _variable_bias_term(vb) -> str:
+def bias_coef_name(b: int) -> str:
+    """Context global holding block b's fixed linear bias coefficient (tunable by ALF)."""
+    return f"biascoef{b}"
+
+
+def variable_bias_k_name(m: int) -> str:
+    """Context global holding the m-th variable bias' k coefficient (tunable by ALF)."""
+    return f"biask{m}"
+
+
+def _variable_bias_term(vb, kname) -> str:
     li, lj = lambda_name(vb.i), lambda_name(vb.j)
-    k, l0 = vb.k, vb.l0
+    l0 = vb.l0
     if vb.type == 6:
-        return f"({k})*{li}*{lj}"
+        return f"{kname}*{li}*{lj}"
     if vb.type == 8:
-        return f"({k})*{li}*{lj}/({li}+({l0}))"
+        return f"{kname}*{li}*{lj}/({li}+({l0}))"
     if vb.type == 10:
-        return f"({k})*{lj}*(1-exp(({l0})*{li}))"
+        return f"{kname}*{lj}*(1-exp(({l0})*{li}))"
     raise NotImplementedError(
         f"variable bias type {vb.type} not implemented (have 6, 8, 10)")
 
 
 def add_biases(system: mm.System, model) -> mm.CustomExternalForce | None:
     """Add fixed + variable lambda biases as one position-independent force.
-    Returns the force, or None if there are no biases."""
-    terms, refs = [], set()
+
+    Every bias COEFFICIENT is a Context global parameter (`biascoef{b}` for the fixed linear bias,
+    `biask{m}` for the m-th variable bias), initialized to the model's current value -- so ALF can
+    retune them live with `builder.set_biases` (no System/Context rebuild). The λ globals appear in
+    the expression; CustomExternalForce cannot expose the derivative, so the bias gradient is picked
+    up by the integrator's group-0 finite difference (with the electrostatics and any injected term).
+
+    Returns the force, or None if there is nothing to add. With `model.bias_flattening` set, a
+    tunable fixed-bias term is created for EVERY alchemical block even at coefficient 0, so ALF has
+    a knob to turn from the start; otherwise only non-zero fixed biases (and any variable biases)
+    create terms, so a plain run adds no bias force at all (unchanged default behavior).
+    """
+    flatten = getattr(model, "bias_flattening", False)
+    terms, coefs, lam_refs = [], [], set()
     for b in range(1, model.n_blocks):
         bias = model.blocks[b].lambda_bias
-        if bias != 0.0:
-            terms.append(f"({bias})*{lambda_name(b)}")
-            refs.add(b)
-    for vb in model.variable_biases:
-        terms.append(_variable_bias_term(vb))
-        refs.update((vb.i, vb.j))
+        if bias != 0.0 or flatten:
+            name = bias_coef_name(b)
+            terms.append(f"{name}*{lambda_name(b)}")
+            coefs.append((name, bias))
+            lam_refs.add(b)
+    for m, vb in enumerate(model.variable_biases):
+        kname = variable_bias_k_name(m)
+        terms.append(_variable_bias_term(vb, kname))
+        coefs.append((kname, vb.k))
+        lam_refs.update((vb.i, vb.j))
     if not terms:
         return None
 
     f = mm.CustomExternalForce(" + ".join(terms))
     f.setName("MSLDBias")
-    for b in sorted(refs):
+    for name, val in coefs:
+        f.addGlobalParameter(name, val)          # tunable coefficient globals
+    for b in sorted(lam_refs):
         f.addGlobalParameter(lambda_name(b), 1.0)
     f.addParticle(0, [])          # dummy anchor; energy does not depend on its position
     system.addForce(f)
