@@ -117,11 +117,11 @@ def _build(block1_bias=2.0):
 
 
 def test_force_group_split():
-    """Analytic-capable forces go to ANALYTIC_FORCE_GROUP; electrostatics + bias stay in group 0.
+    """Analytic-capable forces go to ANALYTIC_FORCE_GROUP; only electrostatics stays in group 0.
 
     The split is by whether a force registered an energy-parameter derivative -- so the base
-    NonbondedForce and the CustomExternalForce bias (neither can) land in the FD group, while
-    the scaled bonded/LJ/within-block CustomForces land in the analytic group.
+    NonbondedForce (it cannot) lands in the FD group, while the scaled bonded/LJ/within-block
+    CustomForces and the bias (a CustomCompoundBondForce) land in the analytic group.
     """
     system, model, ctx, dyn = _build()
     fd, an = [], []
@@ -131,7 +131,9 @@ def test_force_group_split():
     # every analytic-group force actually registered a derivative; no FD-group force did
     assert an and all(f.getNumEnergyParameterDerivatives() > 0 for f in an)
     assert any(isinstance(f, mm.NonbondedForce) for f in fd)          # electrostatics -> FD
-    assert any(f.getName() == "MSLDBias" for f in fd)                 # bias -> FD
+    assert any(f.getName() == "MSLDBias" for f in an)                 # bias -> analytic
+    assert all(isinstance(f, mm.NonbondedForce) or f.getNumEnergyParameterDerivatives() == 0
+               for f in fd if hasattr(f, "getNumEnergyParameterDerivatives"))
     assert dyn._has_fd is True
 
 
@@ -158,8 +160,7 @@ def test_hybrid_dudl_matches_full_fd():
 def test_bias_gradient_captured():
     """Regression: the fixed-bias contribution to dU/dlambda1 is NOT dropped.
 
-    The bias is a CustomExternalForce (cannot expose an analytic derivative) and lives in the
-    FD group. Compare two builds differing ONLY in block1's fixed bias (2.0 vs 0.0) at the same
+    The bias carries an analytic derivative (CustomCompoundBondForce). Compare two builds differing ONLY in block1's fixed bias (2.0 vs 0.0) at the same
     lambda: dU/dlambda1 must differ by exactly the bias coefficient (d(bias*lambda1)/dlambda1 = 2.0).
     Everything else (electrostatics, bonded, LJ, variable bias) is identical and cancels.
     """

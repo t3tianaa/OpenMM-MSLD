@@ -38,7 +38,7 @@ estimates. ADR-0031+ are current.
 | [[ADR-0022 Solvation by overlay after grafting\|ADR-0022]] | Solvate by overlay after grafting | accepted |
 | [[ADR-0023 Restraint groups per block centroid\|ADR-0023]] | Atom restraints: one group per block, to its own centroid | deprecated (known wrong; replacement ADR-0033 proposed) |
 | [[ADR-0024 Home-grown ALF heuristic\|ADR-0024]] | Home-grown ALF heuristic (fixed + coupling biases) | deprecated (replacement ADR-0034 proposed) |
-| [[ADR-0025 Soft-core off in the first version\|ADR-0025]] | Soft-core off in the first version | accepted (revisit, ISS-013) |
+| [[ADR-0025 Soft-core off in the first version\|ADR-0025]] | Soft-core off in the first version | superseded by ADR-0043 |
 | [[ADR-0026 Tier 2 plugin with scope S0 to S4\|ADR-0026]] | Tier 2: C++ plugin with scope S0–S4 | accepted (gated by ADR-0035) |
 | [[ADR-0027 Plugin technology choices\|ADR-0027]] | Plugin technology: common compute layer, Reference first, SWIG; Mac dev / CUDA prod | accepted |
 | [[ADR-0028 Refuse what cannot be scaled\|ADR-0028]] | Refuse what cannot be scaled (CMAP, cross-site 1-4, charge change) | accepted (extended by ADR-0037) |
@@ -56,6 +56,9 @@ estimates. ADR-0031+ are current.
 | [[ADR-0040 Supported nonbonded methods\|ADR-0040]] | Supported nonbonded methods: PME and NoCutoff only | proposed |
 | [[ADR-0041 Default bonded scaling follows BLaDE practice\|ADR-0041]] | Default bonded scaling follows BLaDE removescaling practice | proposed |
 | [[ADR-0042 OpenMM multistate samplers for fixed-lambda cross-checks\|ADR-0042]] | OpenMM multistate samplers for fixed-λ cross-checks; plugin θ in Context state | proposed |
+| [[ADR-0043 Soft-core on by default for overlap-prone pairs\|ADR-0043]] | Soft-core on by default for overlap-prone pairs | accepted |
+| [[ADR-0044 Own SHAKE in the Python driver\|ADR-0044]] | Own SHAKE in the Python driver | accepted |
+| [[ADR-0045 Analytic biases and a large FD step\|ADR-0045]] | Analytic biases and a large FD step | accepted |
 
 Dataview (live, needs the plugin):
 ```dataview

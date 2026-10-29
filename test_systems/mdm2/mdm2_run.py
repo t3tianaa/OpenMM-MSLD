@@ -52,13 +52,10 @@ model.scale_angle = False
 model.scale_system(bundle.system)
 print("blocks at the site:", bundle.mapping.sites[0].block_names)
 
-# theta-parameter choice (from a stability sweep on this site, see DEFERRED.md 'ALF'): with
-# scale_bond/angle off + minimization the run is STABLE for any reasonable theta params (nothing
-# blows up). theta_temp is governed by FRICTION only (not mass, not the FD step): higher friction
-# cools it, but the finite-difference theta-force keeps theta hot (~1400 K at friction 20, ~2400 K
-# at 10) -- it does NOT reach 300 K with this engine (the analytic-derivative plugin is the real
-# fix). So: light-ish mass (mobile) + strong friction (coolest theta available). Populations are
-# still approximate until the plugin / ALF flattening.
+# theta-parameter choice: the earlier "theta runs hot (1400-2400 K)" was a transient during the
+# initial lambda collapse, driven by the 1e5-1e6 kJ/mol dU/dlambda of switched-off variants that
+# solvent had filled (no soft-core then), not by the finite-difference force (AUD-003). Soft-core is
+# now on by default (ADR-0043); these theta params are unchanged pending a rerun.
 for bl in model.blocks[1:]:
     bl.theta_mass = 10.0
     bl.theta_friction = 20.0

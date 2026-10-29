@@ -18,9 +18,16 @@ remainder -- electrostatics (which OpenMM cannot expose), the biases, and anythi
 injected -- is finite-differenced over the FD_FORCE_GROUP energy alone. builder.py
 splits the forces into those two groups.
 
-Limitations: no holonomic constraints (SHAKE), and the remainder finite difference
-still costs O(n_blocks) group-energy evaluations per step (electrostatics dominates).
-Both are removed by the plugin (analytic PME charge-derivative).
+Holonomic constraints: positions are constrained by our own SHAKE (with the pre-drift
+positions as the reference directions, as SHAKE requires), velocities by OpenMM's
+applyVelocityConstraints (RATTLE). Context.applyConstraints is NOT used for the drift: it takes
+the predicted positions as their own reference, which is not time-reversible and steadily
+drains kinetic energy (atoms settled ~30 K below the bath at gamma = 1/ps).
+
+The FD remainder is only the base NonbondedForce, whose energy is exactly quadratic in every
+lambda (charges are lambda*q), so the central difference has no truncation error and a large
+step (default 1e-2) is used to keep roundoff small. It still costs O(n_blocks) group-energy
+evaluations per step; the plugin (analytic PME charge-derivative) removes it.
 """
 from __future__ import annotations
 
@@ -43,12 +50,15 @@ class LambdaDynamics:
     """Owns theta + atom state; integrates both with combined VRORV Langevin."""
 
     def __init__(self, context, model, temperature=300.0, timestep=0.001,
-                 atom_friction=1.0, fd_step=1e-4, seed=None):
+                 atom_friction=1.0, fd_step=1e-2, seed=None):
         self.context = context
         self.model = model
         self.kT = KB * temperature
         self.dt = timestep                       # ps
-        self.h = fd_step                         # FD step in lambda
+        # FD step in lambda. Exact for any h on the quadratic NonbondedForce remainder; roundoff
+        # scales as 1/h (single precision: ~18 kJ/mol rms at h=1e-4 vs ~0.2 at 1e-2, 27k atoms).
+        # A force injected into group 0 that is not quadratic in lambda gets an O(h^2) error.
+        self.h = fd_step
         self.rng = np.random.default_rng(seed)
 
         system = context.getSystem()
@@ -84,8 +94,11 @@ class LambdaDynamics:
             self.bth[b] = math.sqrt((1 - a * a) * self.kT / self.mass[b])
 
         # holonomic constraints (SHAKE/RATTLE) on atoms, if the System has any
-        self.has_constraints = system.getNumConstraints() > 0
+        self.n_constraints = system.getNumConstraints()
+        self.has_constraints = self.n_constraints > 0
         self.constraint_tol = 1e-6
+        if self.has_constraints:
+            self._setup_shake(system)
 
         # dU/dlambda = analytic part (bonded + LJ + within-block correction, via
         # addEnergyParameterDerivative) + a finite difference of the FD_FORCE_GROUP remainder
@@ -98,6 +111,8 @@ class LambdaDynamics:
 
         self._F = None
         self.project()
+        if self.has_constraints:
+            self._rattle()                        # start on the constraint manifold (velocities)
 
     # -----------------------------------------------------------
     # lambda
@@ -142,13 +157,18 @@ class LambdaDynamics:
         LocalEnergyMinimizer.minimize(self.context, tolerance * _F_UNIT, max_iterations)
         self.x = np.array(self.context.getState(getPositions=True)
                           .getPositions(asNumpy=True).value_in_unit(_NM))
-        self._F = None                                  # cached force is stale -> recompute
+        self.invalidate_forces()
         return self
+
+    def invalidate_forces(self):
+        """Drop the cached forces. Call after changing anything they depend on from outside
+        (positions, theta, Context parameters such as biases); step() then recomputes them."""
+        self._F = None
 
     # -----------------------------------------------------------
     # gradients
     # -----------------------------------------------------------
-    def dUdlambda(self, analytic_deriv=None):
+    def dUdlambda(self, analytic_deriv=None, lam=None):
         """dU/dlambda_b for each block.
 
         Analytic part (bonded + LJ + within-block correction) comes straight from OpenMM's
@@ -157,9 +177,11 @@ class LambdaDynamics:
         injected -- is a central finite difference of the FD_FORCE_GROUP energy ALONE.
 
         `analytic_deriv` lets the caller pass a dict of dU/dparam it already fetched alongside
-        the atom forces (one merged getState), avoiding a second energy evaluation.
+        the atom forces (one merged getState), avoiding a second energy evaluation; `lam` the
+        lambdas it already pushed to the Context.
         """
-        lam = self.project()
+        if lam is None:
+            lam = self.project()
         if analytic_deriv is None:
             analytic_deriv = self.context.getState(
                 getParameterDerivatives=True).getEnergyParameterDerivatives()
@@ -180,9 +202,9 @@ class LambdaDynamics:
             d[b] = a + e
         return d, lam
 
-    def dUdtheta(self, analytic_deriv=None):
+    def dUdtheta(self, analytic_deriv=None, lam=None):
         """Softmax chain rule: dU/dtheta_i from dU/dlambda (per site)."""
-        d, lam = self.dUdlambda(analytic_deriv)
+        d, lam = self.dUdlambda(analytic_deriv, lam)
         g = [0.0] * self.model.n_blocks
         fnex = self.model.fnex
         for s in range(1, self.model.n_sites):
@@ -200,26 +222,71 @@ class LambdaDynamics:
     def _forces(self):
         """Physical forces (= -gradient) on atoms and theta at the current state."""
         self.context.setPositions(self.x * _NM)     # sync atom positions into the Context
-        self.project()                              # push current lambda to the Context
+        lam = self.project()                        # push current lambda to the Context
         # one evaluation gives BOTH the atom forces and the analytic dU/dlambda parts
         st = self.context.getState(getForces=True, getParameterDerivatives=True)
         fx = np.array(st.getForces(asNumpy=True).value_in_unit(_F_UNIT))   # atom forces = −dU/dx
         deriv = st.getEnergyParameterDerivatives()  # analytic dU/dlambda (bonded+LJ+within-block+bias)
-        g = self.dUdtheta(deriv)                    # theta force (+ electrostatics-only FD inside)
+        g = self.dUdtheta(deriv, lam)               # theta force (+ electrostatics-only FD inside)
         fth = {b: -g[b] for b in self.dof}          # theta force = -dU/dtheta
         return fx, fth
 
-    # holonomic constraints on atoms (SHAKE positions, RATTLE velocities) 
+    # holonomic constraints on atoms (SHAKE positions, RATTLE velocities)
+    def _setup_shake(self, system):
+        """Constraint tables for SHAKE, split into colors so no atom appears twice in a color.
+
+        Within a color the corrections are independent and applied at once (vectorized); the
+        colors are swept in turn, which is Gauss-Seidel SHAKE and converges in a few sweeps."""
+        n = self.n_constraints
+        I = np.empty(n, dtype=np.int64); J = np.empty(n, dtype=np.int64); d = np.empty(n)
+        for k in range(n):
+            i, j, dist = system.getConstraintParameters(k)
+            I[k], J[k], d[k] = i, j, dist.value_in_unit(_NM)
+        if np.any(self.mass_x[I] == 0) or np.any(self.mass_x[J] == 0):
+            raise ValueError("constraints on zero-mass particles are not supported")
+        busy: list[set] = []
+        color = np.empty(n, dtype=np.int64)
+        for k in range(n):
+            c = 0
+            while c < len(busy) and (I[k] in busy[c] or J[k] in busy[c]):
+                c += 1
+            if c == len(busy):
+                busy.append(set())
+            busy[c].update((I[k], J[k]))
+            color[k] = c
+        invm = 1.0 / self.mass_x
+        self._shake_groups = []
+        for c in range(len(busy)):
+            ks = np.flatnonzero(color == c)
+            ii, jj = I[ks], J[ks]
+            self._shake_groups.append((ii, jj, d[ks] ** 2, invm[ii][:, None], invm[jj][:, None],
+                                       invm[ii] + invm[jj]))
+        self.shake_max_iter = 1000
+
+    def _shake(self, x_ref, x):
+        """SHAKE: move `x` onto the constraint manifold along the bond vectors of `x_ref`."""
+        tol = self.constraint_tol
+        for _ in range(self.shake_max_iter):
+            worst = 0.0
+            for ii, jj, d2, wi, wj, wsum in self._shake_groups:
+                r = x[ii] - x[jj]
+                diff = d2 - np.einsum("ij,ij->i", r, r)
+                worst = max(worst, float(np.max(np.abs(diff) / d2)))
+                s = x_ref[ii] - x_ref[jj]
+                g = diff / (2.0 * wsum * np.einsum("ij,ij->i", r, s))
+                x[ii] += (g[:, None] * wi) * s
+                x[jj] -= (g[:, None] * wj) * s
+            if worst < 2.0 * tol:              # relative error in |r|, ~tol
+                return x
+        raise RuntimeError(f"SHAKE did not converge in {self.shake_max_iter} sweeps")
+
     def _drift_x(self, hdt):
         """Half drift of the atoms, with SHAKE if the System has constraints."""
         if not self.has_constraints:
             self.x += hdt * self.vx
             return
         x_pred = self.x + hdt * self.vx
-        self.context.setPositions(x_pred * _NM)
-        self.context.applyConstraints(self.constraint_tol)          # SHAKE
-        x_con = np.array(self.context.getState(getPositions=True)
-                         .getPositions(asNumpy=True).value_in_unit(_NM))
+        x_con = self._shake(self.x, x_pred.copy())
         self.vx += (x_con - x_pred) / hdt          # constraint impulse -> velocity
         self.x = x_con
 
@@ -345,3 +412,9 @@ class LambdaDynamics:
             return 0.0
         ke = 0.5 * sum(self.mass[b] * self.vtheta[b] ** 2 for b in self.dof)
         return 2.0 * ke / (len(self.dof) * KB)
+
+    def atom_temperature(self):
+        """Instantaneous atom kinetic temperature over 3N - n_constraints degrees of freedom."""
+        ndof = 3 * int(np.count_nonzero(self.mass_x)) - self.n_constraints
+        ke = 0.5 * float(np.sum(self.mass_x[:, None] * self.vx ** 2))
+        return 2.0 * ke / (ndof * KB)

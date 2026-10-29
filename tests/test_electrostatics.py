@@ -70,6 +70,7 @@ def test_elec_single_lambda():
     system = _nb_nocutoff([1.0, 1.0, 0.0])
     pos = [Vec3(0, 0, 0), Vec3(0.3, 0, 0), Vec3(1.0, 0, 0)] * unit.nanometer
     m = MSLDModel(3)
+    m.softcore_alpha = 0.0           # this file checks the plain linear-lambda formulas
     m.add_block(site=1, atoms=[1])
     m.add_block(site=1, atoms=[2])
     m.finalize()
@@ -82,6 +83,7 @@ def test_elec_product_lambda():
     pos = [Vec3(2, 0, 0), Vec3(0, 0, 0), Vec3(2, 2, 0),
            Vec3(0.4, 0, 0), Vec3(2, 2, 2)] * unit.nanometer
     m = MSLDModel(5)
+    m.softcore_alpha = 0.0           # this file checks the plain linear-lambda formulas
     m.add_block(site=1, atoms=[1])
     m.add_block(site=1, atoms=[2])
     m.add_block(site=2, atoms=[3])
@@ -96,6 +98,7 @@ def test_elec_same_site_excluded():
     system = _nb_nocutoff([1.0, 1.0, 0.0])
     pos = [Vec3(0, 0, 0), Vec3(0.2, 0, 0), Vec3(1.5, 0, 0)] * unit.nanometer
     m = MSLDModel(3)
+    m.softcore_alpha = 0.0           # this file checks the plain linear-lambda formulas
     m.add_block(site=1, atoms=[0])
     m.add_block(site=1, atoms=[1])
     m.finalize()
@@ -129,6 +132,7 @@ def test_elec_pme_recovers_base():
     e_base, _ = _energy_and_derivs(system, pos)          # pristine PME energy
 
     m = MSLDModel(6)
+    m.softcore_alpha = 0.0           # this file checks the plain linear-lambda formulas
     m.add_block(site=1, atoms=[0])
     m.add_block(site=1, atoms=[1])
     m.add_block(site=2, atoms=[2])
