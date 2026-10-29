@@ -2,7 +2,8 @@
 id: ADR-0025
 type: adr
 title: Soft-core off in the first version
-status: accepted
+status: superseded
+superseded_by: ["[[ADR-0043 Soft-core on by default for overlap-prone pairs|ADR-0043]]"]
 date: 2026-08-05
 deciders: [Tetiana]
 affects: ["[[Lennard-Jones scaling module]]", "[[Electrostatics scaling module]]"]

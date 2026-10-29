@@ -13,6 +13,8 @@ Run: `for t in tests/test_*.py; do python "$t"; done` in the `msld` env. Mostly 
 | test | checks | requirements |
 |---|---|---|
 | `test_master` | λ = 1 ≡ base, energy and forces (~1e-13) | [[REQ-023 Lambda one reproduces the base system\|REQ-023]] |
+| `test_softcore` | soft-core: λ∈{0,1} unchanged, bounded dU/dλ under overlap, hybrid dU/dλ and dU/dθ vs FD | [[REQ-011 Soft-core for alchemical nonbonded\|REQ-011]] |
+| `test_shake` | SHAKE time-reversible, velocities on the manifold, rigid water at the bath temperature (CPU) | [[REQ-016 Canonical sampling of atoms and theta\|REQ-016]] |
 | `test_model` | model invariants, classifiers, softmax | [[REQ-001 Represent sites, blocks and environment\|REQ-001]], [[REQ-002 Lambda from theta with implicit constraints\|REQ-002]] |
 | `test_builder` | bonded scaling + dU/dλ (analytic vs FD vs OpenMM deriv) | [[REQ-003 Scale bonded terms by block lambdas\|REQ-003]] |
 | `test_angles_torsions` | angle/torsion single- and product-λ | [[REQ-003 Scale bonded terms by block lambdas\|REQ-003]] |

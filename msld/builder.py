@@ -16,11 +16,12 @@ from .forces import lambda_name
 # dU/dlambda is a hybrid: analytic where OpenMM can expose it, finite difference where it
 # cannot. We split the forces into two groups so the integrator can do exactly that:
 #   ANALYTIC_FORCE_GROUP : every force that registered a dU/dlambda_b via
-#                          addEnergyParameterDerivative (bonded, LJ, within-block elec
-#                          correction). Their derivative comes back for free from getState.
+#                          addEnergyParameterDerivative (bonded, LJ, soft-core and within-block
+#                          elec corrections, biases). Their derivative comes back for free from
+#                          getState.
 #   group 0 (the default): everything else that depends on lambda -- the base
 #                          NonbondedForce (charge-scaling electrostatics, which OpenMM cannot
-#                          expose), the CustomExternalForce biases, and ANY force a caller
+#                          expose; exactly quadratic in each lambda), and ANY force a caller
 #                          injects after building (e.g. ALF test offsets). The integrator
 #                          finite-differences THIS group alone, so nothing lambda-dependent
 #                          is ever dropped. lambda-independent env forces also sit here and
@@ -132,9 +133,16 @@ def scale_msld_system(system: mm.System, model, check_unhandled: bool = True) ->
     # so it must run BEFORE add_scaled_electrostatics zeroes them
     info["within_block_elec_corrections"] = [
         f.getName() for f in forces.add_within_block_elec_correction(system, model)]
+    # raw charges, read before add_scaled_electrostatics moves them into lambda offsets
+    nbfs = [f for f in system.getForces() if isinstance(f, mm.NonbondedForce)]
+    raw_q = ([nbfs[0].getParticleParameters(i)[0].value_in_unit(forces._E)
+              for i in range(system.getNumParticles())] if nbfs else [])
     nbf = forces.add_scaled_electrostatics(system, model)
     info["scaled_electrostatics"] = (nbf is not None)
     info["scaled_lj_forces"] = [f.getName() for f in forces.add_scaled_lj(system, model)]
+    # soft-core direct-space Coulomb for overlap-prone pairs (no-op if model.softcore_alpha == 0)
+    info["softcore_elec_forces"] = [
+        f.getName() for f in forces.add_softcore_electrostatics(system, model, raw_q)]
     # CHARMM tabulated LJ (NBFIX -> CustomNonbondedForce); no-op on Amber
     info["scaled_charmm_lj_forces"] = [
         f.getName() for f in forces.add_scaled_charmm_lj(system, model)]

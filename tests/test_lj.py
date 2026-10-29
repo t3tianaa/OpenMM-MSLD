@@ -64,6 +64,7 @@ def test_lj_single_lambda():
     system = _nb_lj([1.0, 1.0, 0.0])
     pos = [Vec3(0, 0, 0), Vec3(0.35, 0, 0), Vec3(1.5, 0, 0)] * unit.nanometer
     m = MSLDModel(3)
+    m.softcore_alpha = 0.0           # this file checks the plain linear-lambda formulas
     m.add_block(site=1, atoms=[1])
     m.add_block(site=1, atoms=[2])
     m.finalize()
@@ -76,6 +77,7 @@ def test_lj_product_lambda():
     pos = [Vec3(2, 0, 0), Vec3(0, 0, 0), Vec3(2, 2, 0),
            Vec3(0.35, 0, 0), Vec3(2, 2, 2)] * unit.nanometer
     m = MSLDModel(5)
+    m.softcore_alpha = 0.0           # this file checks the plain linear-lambda formulas
     m.add_block(site=1, atoms=[1])
     m.add_block(site=1, atoms=[2])
     m.add_block(site=2, atoms=[3])
@@ -90,6 +92,7 @@ def test_lj_same_site_excluded():
     system = _nb_lj([1.0, 1.0, 0.0])
     pos = [Vec3(0, 0, 0), Vec3(0.35, 0, 0), Vec3(1.5, 0, 0)] * unit.nanometer
     m = MSLDModel(3)
+    m.softcore_alpha = 0.0           # this file checks the plain linear-lambda formulas
     m.add_block(site=1, atoms=[0])
     m.add_block(site=1, atoms=[1])
     m.finalize()
@@ -105,6 +108,7 @@ def _recovers_base(method, box):
            Vec3(1.0, 1.0, 1.0), Vec3(0.7, 0.4, 0.7), Vec3(1.3, 1.3, 0.5)] * unit.nanometer
     e_base, _ = _energy_and_derivs(system, pos)
     m = MSLDModel(6)
+    m.softcore_alpha = 0.0           # this file checks the plain linear-lambda formulas
     m.add_block(site=1, atoms=[2])
     m.add_block(site=1, atoms=[3])
     m.add_block(site=2, atoms=[4])
