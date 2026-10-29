@@ -24,58 +24,58 @@ SORT priority ASC, id ASC
 
 ### todo (48)
 
-| task                                                                 | title                                         | priority | milestone | feature                                                        |
-| -------------------------------------------------------------------- | --------------------------------------------- | -------- | --------- | -------------------------------------------------------------- |
-| [[TASK-030 Commit and push the local state to a branch\|TASK-030]]   | Commit and push the local state to a branch   | P0       | M4        | [[FEAT-044 Knowledge vault and process\|FEAT-044]]             |
-| [[TASK-031 Rebuild atom restraint groups\|TASK-031]]                 | Rebuild atom restraint groups                 | P0       | M4        | [[FEAT-007 Atom restraints\|FEAT-007]]                         |
-| [[TASK-032 Resolve BLaDE theta units\|TASK-032]]                     | Resolve BLaDE theta units                     | P0       | M4        | [[FEAT-008 Lambda-dynamics integrator\|FEAT-008]]              |
-| [[TASK-033 Rerun MDM2 with reference theta parameters\|TASK-033]]    | Rerun MDM2 with reference theta parameters    | P0       | M4        | [[FEAT-022 MDM2 test system\|FEAT-022]]                        |
-| [[TASK-034 Add same-site exclusions to CHARMM LJ copies\|TASK-034]]  | Add same-site exclusions to CHARMM LJ copies  | P1       | M4        | [[FEAT-047 Engine hardening\|FEAT-047]]                        |
-| [[TASK-035 Whitelist force types\|TASK-035]]                         | Whitelist force types                         | P1       | M4        | [[FEAT-047 Engine hardening\|FEAT-047]]                        |
-| [[TASK-036 Preserve env-env dispersion correction\|TASK-036]]        | Preserve env-env dispersion correction        | P1       | M4        | [[FEAT-047 Engine hardening\|FEAT-047]]                        |
-| [[TASK-038 Refuse reaction-field cutoff methods\|TASK-038]]          | Refuse reaction-field cutoff methods          | P1       | M4        | [[FEAT-047 Engine hardening\|FEAT-047]]                        |
-| [[TASK-040 Audit the preparation layer\|TASK-040]]                   | Audit the preparation layer                   | P1       | M4        | [[FEAT-013 Ingest pipeline\|FEAT-013]]                         |
-| [[TASK-042 Get BLaDE running with reference data\|TASK-042]]         | Get BLaDE running with reference data         | P1       | M5        | [[FEAT-030 BLaDE cross-validation harness\|FEAT-030]]          |
-| [[TASK-043 BLaDE fixed-lambda cross-check\|TASK-043]]                | BLaDE fixed-lambda cross-check                | P1       | M5        | [[FEAT-030 BLaDE cross-validation harness\|FEAT-030]]          |
-| [[TASK-044 Decide the same-site PME convention\|TASK-044]]           | Decide the same-site PME convention           | P1       | M5        | [[FEAT-003 Electrostatics scaling\|FEAT-003]]                  |
-| [[TASK-045 Import BLaDE MSLD setups\|TASK-045]]                      | Import BLaDE MSLD setups                      | P1       | M5        | [[FEAT-030 BLaDE cross-validation harness\|FEAT-030]]          |
-| [[TASK-067 NumPy partial-lambda oracle tests\|TASK-067]]             | NumPy partial-lambda oracle tests             | P1       | M4        | [[FEAT-045 Independent partial-lambda oracle tests\|FEAT-045]] |
-| [[TASK-070 CHARMM force switching for the cross-check\|TASK-070]]    | CHARMM force switching for the cross-check    | P1       | M5        | [[FEAT-030 BLaDE cross-validation harness\|FEAT-030]]          |
-| [[TASK-072 Point agents to the vault via CLAUDE.md\|TASK-072]]       | Point agents to the vault via CLAUDE.md       | P1       | M4        | [[FEAT-044 Knowledge vault and process\|FEAT-044]]             |
-| [[TASK-037 Read PME alpha from the force\|TASK-037]]                 | Read PME alpha from the force                 | P2       | M4        | [[FEAT-047 Engine hardening\|FEAT-047]]                        |
-| [[TASK-039 Handle zero-mass particles in the integrator\|TASK-039]]  | Handle zero-mass particles in the integrator  | P2       | M4        | [[FEAT-047 Engine hardening\|FEAT-047]]                        |
-| [[TASK-041 Analytic bias derivatives\|TASK-041]]                     | Analytic bias derivatives                     | P2       | M4        | [[FEAT-006 Lambda biases\|FEAT-006]]                           |
-| [[TASK-046 Implement or adopt standard ALF\|TASK-046]]               | Implement or adopt standard ALF               | P2       | M6        | [[FEAT-035 Standard ALF\|FEAT-035]]                            |
-| [[TASK-047 Two-leg ddG estimator\|TASK-047]]                         | Two-leg ddG estimator                         | P2       | M6        | [[FEAT-040 Free-energy analysis subsystem\|FEAT-040]]          |
-| [[TASK-048 Sampling diagnostics\|TASK-048]]                          | Sampling diagnostics                          | P2       | M6        | [[FEAT-040 Free-energy analysis subsystem\|FEAT-040]]          |
-| [[TASK-049 Interim NPT in the Python driver\|TASK-049]]              | Interim NPT in the Python driver              | P2       | M7        | [[FEAT-032 NPT ensemble\|FEAT-032]]                            |
-| [[TASK-050 Soft-core design spike\|TASK-050]]                        | Soft-core design spike                        | P2       | M7        | [[FEAT-031 Soft-core\|FEAT-031]]                               |
-| [[TASK-055 Validate input geometry\|TASK-055]]                       | Validate input geometry                       | P2       | M4        | [[FEAT-043 Input geometry validation\|FEAT-043]]               |
-| [[TASK-057 BLaDE-style bonded scaling switches\|TASK-057]]           | BLaDE-style bonded scaling switches           | P2       | M4        | [[FEAT-002 Bonded term scaling\|FEAT-002]]                     |
-| [[TASK-058 Plugin S0 skeleton\|TASK-058]]                            | Plugin S0 skeleton                            | P2       | M7        | [[FEAT-033 Analytic nonbonded plugin force\|FEAT-033]]         |
-| [[TASK-059 Plugin S1 Reference nonbonded force\|TASK-059]]           | Plugin S1 Reference nonbonded force           | P2       | M7        | [[FEAT-033 Analytic nonbonded plugin force\|FEAT-033]]         |
-| [[TASK-071 Checkpoint and restart\|TASK-071]]                        | Checkpoint and restart                        | P2       | M6        | [[FEAT-046 Checkpoint and restart\|FEAT-046]]                  |
-| [[TASK-073 Retire the legacy documents\|TASK-073]]                   | Retire the legacy documents                   | P2       | M4        | [[FEAT-044 Knowledge vault and process\|FEAT-044]]             |
-| [[TASK-074 Study the ALF package\|TASK-074]]                         | Study the ALF package                         | P2       | M6        | [[FEAT-035 Standard ALF\|FEAT-035]]                            |
-| [[TASK-075 Study OpenMM nonbonded kernels for the plugin\|TASK-075]] | Study OpenMM nonbonded kernels for the plugin | P2       | M7        | [[FEAT-033 Analytic nonbonded plugin force\|FEAT-033]]         |
-| [[TASK-051 Implement theta biases\|TASK-051]]                        | Implement theta biases                        | P3       | M6        | [[FEAT-038 Theta biases\|FEAT-038]]                            |
-| [[TASK-052 Cross-site 1-4 scaling\|TASK-052]]                        | Cross-site 1-4 scaling                        | P3       | M8        | [[FEAT-039 Cross-site 1-4 scaling\|FEAT-039]]                  |
-| [[TASK-053 CMAP scaling spike\|TASK-053]]                            | CMAP scaling spike                            | P3       | M8        | [[FEAT-036 CMAP scaling\|FEAT-036]]                            |
-| [[TASK-054 Charge-changing perturbations\|TASK-054]]                 | Charge-changing perturbations                 | P3       | M8        | [[FEAT-037 Charge-changing perturbations\|FEAT-037]]           |
-| [[TASK-056 Fixed-block semantics like BLaDE\|TASK-056]]              | Fixed-block semantics like BLaDE              | P3       | M5        | [[FEAT-008 Lambda-dynamics integrator\|FEAT-008]]              |
-| [[TASK-060 Plugin S2 GPU kernels\|TASK-060]]                         | Plugin S2 GPU kernels                         | P3       | M7        | [[FEAT-033 Analytic nonbonded plugin force\|FEAT-033]]         |
-| [[TASK-061 Plugin S3 fused integrator\|TASK-061]]                    | Plugin S3 fused integrator                    | P3       | M7        | [[FEAT-034 Fused MSLD integrator plugin\|FEAT-034]]            |
-| [[TASK-062 Plugin S4 soft-core\|TASK-062]]                           | Plugin S4 soft-core                           | P3       | M7        | [[FEAT-031 Soft-core\|FEAT-031]]                               |
-| [[TASK-063 CUDA validation run on the cluster\|TASK-063]]            | CUDA validation run on the cluster            | P3       | M7        | [[FEAT-010 Multi-platform support\|FEAT-010]]                  |
-| [[TASK-064 Amber FEP or TI comparison\|TASK-064]]                    | Amber FEP or TI comparison                    | P3       | M8        | [[FEAT-041 Amber validation vs FEP or TI\|FEAT-041]]           |
-| [[TASK-065 GROMACS and frcmod ingest routes\|TASK-065]]              | GROMACS and frcmod ingest routes              | P3       | M8        | [[FEAT-042 Additional ingest routes\|FEAT-042]]                |
-| [[TASK-066 Consider a pytest-compatible test layout\|TASK-066]]      | Consider a pytest-compatible test layout      | P3       | M4        | [[FEAT-044 Knowledge vault and process\|FEAT-044]]             |
-| [[TASK-068 Buffer atom duplication\|TASK-068]]                       | Buffer atom duplication                       | P3       | M8        | [[FEAT-018 Charge renormalization\|FEAT-018]]                  |
-| [[TASK-069 Scalable LJ grouping for many sites\|TASK-069]]           | Scalable LJ grouping for many sites           | P3       | M7        | [[FEAT-004 Lennard-Jones scaling\|FEAT-004]]                   |
-| [[TASK-076 Pin literature citations\|TASK-076]]                      | Pin literature citations                      | P3       | M4        | [[FEAT-044 Knowledge vault and process\|FEAT-044]]             |
-| [[TASK-077 Mine earlier sessions for decision history\|TASK-077]]    | Mine earlier sessions for decision history    | P3       | M4        | [[FEAT-044 Knowledge vault and process\|FEAT-044]]             |
+| task | title | priority | milestone | feature |
+|---|---|---|---|---|
+| [[TASK-030 Commit and push the local state to a branch\|TASK-030]] | Commit and push the local state to a branch | P0 | M4 | [[FEAT-044 Knowledge vault and process\|FEAT-044]] |
+| [[TASK-031 Rebuild atom restraint groups\|TASK-031]] | Rebuild atom restraint groups | P0 | M4 | [[FEAT-007 Atom restraints\|FEAT-007]] |
+| [[TASK-032 Resolve BLaDE theta units\|TASK-032]] | Resolve BLaDE theta units | P0 | M4 | [[FEAT-008 Lambda-dynamics integrator\|FEAT-008]] |
+| [[TASK-033 Rerun MDM2 with reference theta parameters\|TASK-033]] | Rerun MDM2 with reference theta parameters | P0 | M4 | [[FEAT-022 MDM2 test system\|FEAT-022]] |
+| [[TASK-034 Add same-site exclusions to CHARMM LJ copies\|TASK-034]] | Add same-site exclusions to CHARMM LJ copies | P1 | M4 | [[FEAT-047 Engine hardening\|FEAT-047]] |
+| [[TASK-035 Whitelist force types\|TASK-035]] | Whitelist force types | P1 | M4 | [[FEAT-047 Engine hardening\|FEAT-047]] |
+| [[TASK-036 Preserve env-env dispersion correction\|TASK-036]] | Preserve env-env dispersion correction | P1 | M4 | [[FEAT-047 Engine hardening\|FEAT-047]] |
+| [[TASK-038 Refuse reaction-field cutoff methods\|TASK-038]] | Refuse reaction-field cutoff methods | P1 | M4 | [[FEAT-047 Engine hardening\|FEAT-047]] |
+| [[TASK-040 Audit the preparation layer\|TASK-040]] | Audit the preparation layer | P1 | M4 | [[FEAT-013 Ingest pipeline\|FEAT-013]] |
+| [[TASK-042 Get BLaDE running with reference data\|TASK-042]] | Get BLaDE running with reference data | P1 | M5 | [[FEAT-030 BLaDE cross-validation harness\|FEAT-030]] |
+| [[TASK-043 BLaDE fixed-lambda cross-check\|TASK-043]] | BLaDE fixed-lambda cross-check | P1 | M5 | [[FEAT-030 BLaDE cross-validation harness\|FEAT-030]] |
+| [[TASK-044 Decide the same-site PME convention\|TASK-044]] | Decide the same-site PME convention | P1 | M5 | [[FEAT-003 Electrostatics scaling\|FEAT-003]] |
+| [[TASK-045 Import BLaDE MSLD setups\|TASK-045]] | Import BLaDE MSLD setups | P1 | M5 | [[FEAT-030 BLaDE cross-validation harness\|FEAT-030]] |
+| [[TASK-067 NumPy partial-lambda oracle tests\|TASK-067]] | NumPy partial-lambda oracle tests | P1 | M4 | [[FEAT-045 Independent partial-lambda oracle tests\|FEAT-045]] |
+| [[TASK-070 CHARMM force switching for the cross-check\|TASK-070]] | CHARMM force switching for the cross-check | P1 | M5 | [[FEAT-030 BLaDE cross-validation harness\|FEAT-030]] |
+| [[TASK-072 Point agents to the vault via CLAUDE.md\|TASK-072]] | Point agents to the vault via CLAUDE.md | P1 | M4 | [[FEAT-044 Knowledge vault and process\|FEAT-044]] |
+| [[TASK-078 Fixed-lambda replica-exchange cross-check\|TASK-078]] | Fixed-lambda replica-exchange cross-check | P1 | M5 | [[FEAT-041 Amber validation vs FEP or TI\|FEAT-041]] |
+| [[TASK-037 Read PME alpha from the force\|TASK-037]] | Read PME alpha from the force | P2 | M4 | [[FEAT-047 Engine hardening\|FEAT-047]] |
+| [[TASK-039 Handle zero-mass particles in the integrator\|TASK-039]] | Handle zero-mass particles in the integrator | P2 | M4 | [[FEAT-047 Engine hardening\|FEAT-047]] |
+| [[TASK-041 Analytic bias derivatives\|TASK-041]] | Analytic bias derivatives | P2 | M4 | [[FEAT-006 Lambda biases\|FEAT-006]] |
+| [[TASK-046 Implement or adopt standard ALF\|TASK-046]] | Implement or adopt standard ALF | P2 | M6 | [[FEAT-035 Standard ALF\|FEAT-035]] |
+| [[TASK-047 Two-leg ddG estimator\|TASK-047]] | Two-leg ddG estimator | P2 | M6 | [[FEAT-040 Free-energy analysis subsystem\|FEAT-040]] |
+| [[TASK-048 Sampling diagnostics\|TASK-048]] | Sampling diagnostics | P2 | M6 | [[FEAT-040 Free-energy analysis subsystem\|FEAT-040]] |
+| [[TASK-049 Interim NPT in the Python driver\|TASK-049]] | Interim NPT in the Python driver | P2 | M7 | [[FEAT-032 NPT ensemble\|FEAT-032]] |
+| [[TASK-050 Soft-core design spike\|TASK-050]] | Soft-core design spike | P2 | M7 | [[FEAT-031 Soft-core\|FEAT-031]] |
+| [[TASK-055 Validate input geometry\|TASK-055]] | Validate input geometry | P2 | M4 | [[FEAT-043 Input geometry validation\|FEAT-043]] |
+| [[TASK-057 BLaDE-style bonded scaling switches\|TASK-057]] | BLaDE-style bonded scaling switches | P2 | M4 | [[FEAT-002 Bonded term scaling\|FEAT-002]] |
+| [[TASK-058 Plugin S0 skeleton\|TASK-058]] | Plugin S0 skeleton | P2 | M7 | [[FEAT-033 Analytic nonbonded plugin force\|FEAT-033]] |
+| [[TASK-059 Plugin S1 Reference nonbonded force\|TASK-059]] | Plugin S1 Reference nonbonded force | P2 | M7 | [[FEAT-033 Analytic nonbonded plugin force\|FEAT-033]] |
+| [[TASK-071 Checkpoint and restart\|TASK-071]] | Checkpoint and restart | P2 | M6 | [[FEAT-046 Checkpoint and restart\|FEAT-046]] |
+| [[TASK-074 Study the ALF package\|TASK-074]] | Study the ALF package | P2 | M6 | [[FEAT-035 Standard ALF\|FEAT-035]] |
+| [[TASK-075 Study OpenMM nonbonded kernels for the plugin\|TASK-075]] | Study OpenMM nonbonded kernels for the plugin | P2 | M7 | [[FEAT-033 Analytic nonbonded plugin force\|FEAT-033]] |
+| [[TASK-051 Implement theta biases\|TASK-051]] | Implement theta biases | P3 | M6 | [[FEAT-038 Theta biases\|FEAT-038]] |
+| [[TASK-052 Cross-site 1-4 scaling\|TASK-052]] | Cross-site 1-4 scaling | P3 | M8 | [[FEAT-039 Cross-site 1-4 scaling\|FEAT-039]] |
+| [[TASK-053 CMAP scaling spike\|TASK-053]] | CMAP scaling spike | P3 | M8 | [[FEAT-036 CMAP scaling\|FEAT-036]] |
+| [[TASK-054 Charge-changing perturbations\|TASK-054]] | Charge-changing perturbations | P3 | M8 | [[FEAT-037 Charge-changing perturbations\|FEAT-037]] |
+| [[TASK-056 Fixed-block semantics like BLaDE\|TASK-056]] | Fixed-block semantics like BLaDE | P3 | M5 | [[FEAT-008 Lambda-dynamics integrator\|FEAT-008]] |
+| [[TASK-060 Plugin S2 GPU kernels\|TASK-060]] | Plugin S2 GPU kernels | P3 | M7 | [[FEAT-033 Analytic nonbonded plugin force\|FEAT-033]] |
+| [[TASK-061 Plugin S3 fused integrator\|TASK-061]] | Plugin S3 fused integrator | P3 | M7 | [[FEAT-034 Fused MSLD integrator plugin\|FEAT-034]] |
+| [[TASK-062 Plugin S4 soft-core\|TASK-062]] | Plugin S4 soft-core | P3 | M7 | [[FEAT-031 Soft-core\|FEAT-031]] |
+| [[TASK-063 CUDA validation run on the cluster\|TASK-063]] | CUDA validation run on the cluster | P3 | M7 | [[FEAT-010 Multi-platform support\|FEAT-010]] |
+| [[TASK-064 Amber FEP or TI comparison\|TASK-064]] | Amber FEP or TI comparison | P3 | M8 | [[FEAT-041 Amber validation vs FEP or TI\|FEAT-041]] |
+| [[TASK-065 GROMACS and frcmod ingest routes\|TASK-065]] | GROMACS and frcmod ingest routes | P3 | M8 | [[FEAT-042 Additional ingest routes\|FEAT-042]] |
+| [[TASK-066 Consider a pytest-compatible test layout\|TASK-066]] | Consider a pytest-compatible test layout | P3 | M4 | [[FEAT-044 Knowledge vault and process\|FEAT-044]] |
+| [[TASK-068 Buffer atom duplication\|TASK-068]] | Buffer atom duplication | P3 | M8 | [[FEAT-018 Charge renormalization\|FEAT-018]] |
+| [[TASK-069 Scalable LJ grouping for many sites\|TASK-069]] | Scalable LJ grouping for many sites | P3 | M7 | [[FEAT-004 Lennard-Jones scaling\|FEAT-004]] |
+| [[TASK-076 Pin literature citations\|TASK-076]] | Pin literature citations | P3 | M4 | [[FEAT-044 Knowledge vault and process\|FEAT-044]] |
+| [[TASK-077 Mine earlier sessions for decision history\|TASK-077]] | Mine earlier sessions for decision history | P3 | M4 | [[FEAT-044 Knowledge vault and process\|FEAT-044]] |
 
-### done (28)
+### done (30)
 
 | task | title | priority | milestone | feature |
 |---|---|---|---|---|
@@ -107,5 +107,7 @@ SORT priority ASC, id ASC
 | [[TASK-026 Tier 0 analytic dU-dlambda\|TASK-026]] | Tier 0 analytic dU/dlambda | P1 | M2 | [[FEAT-009 Tier-0 analytic dU-dlambda\|FEAT-009]] |
 | [[TASK-027 Scope the C++ plugin\|TASK-027]] | Scope the C++ plugin | P2 | M7 | [[FEAT-033 Analytic nonbonded plugin force\|FEAT-033]] |
 | [[TASK-028 Audit the local working copy\|TASK-028]] | Audit the local working copy | P0 | M4 | [[FEAT-047 Engine hardening\|FEAT-047]] |
+| [[TASK-073 Retire the legacy documents\|TASK-073]] | Retire the legacy documents | P2 | M4 | [[FEAT-044 Knowledge vault and process\|FEAT-044]] |
+| [[TASK-079 Update the Mac env to OpenMM 8.6.1\|TASK-079]] | Update the Mac env to OpenMM 8.6.1 | P1 | M4 | [[FEAT-047 Engine hardening\|FEAT-047]] |
 <!-- END GENERATED -->
 

@@ -2,7 +2,7 @@
 title: Decision log
 type: meta
 status: active
-updated: 2026-09-27
+updated: 2026-10-29
 ---
 # Decision log (ADR index)
 
@@ -55,6 +55,7 @@ estimates. ADR-0031+ are current.
 | [[ADR-0039 Dispersion correction handling\|ADR-0039]] | Dispersion correction handling | proposed |
 | [[ADR-0040 Supported nonbonded methods\|ADR-0040]] | Supported nonbonded methods: PME and NoCutoff only | proposed |
 | [[ADR-0041 Default bonded scaling follows BLaDE practice\|ADR-0041]] | Default bonded scaling follows BLaDE removescaling practice | proposed |
+| [[ADR-0042 OpenMM multistate samplers for fixed-lambda cross-checks\|ADR-0042]] | OpenMM multistate samplers for fixed-λ cross-checks; plugin θ in Context state | proposed |
 
 Dataview (live, needs the plugin):
 ```dataview

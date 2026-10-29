@@ -11,6 +11,5 @@ From standard inputs (PDB / prmtop / psf + parameters / SDF) and a list of varia
 correct hybrid MSLD system: shared environment, one block per variant, consistent charges and
 parameters, aligned coordinates, solvent and ions — with no hand editing.
 
-Why: preparation is where most real-world errors enter, and it is the most time-consuming manual
-step in CHARMM-based MSLD workflows ([[BLaDE T4L and HSP90 examples]]).
+Why: preparation is where most real-world errors enter, and it is the most time-consuming manual step in CHARMM-based MSLD workflows ([[BLaDE T4L and HSP90 examples]]).
 

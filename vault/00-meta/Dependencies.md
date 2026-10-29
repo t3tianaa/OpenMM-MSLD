@@ -2,13 +2,17 @@
 title: Dependencies
 type: meta
 status: active
-updated: 2026-09-27
+updated: 2026-10-29
 ---
 # Dependencies
 
-Declared in `env/environment.yml` (conda env `msld`). Versions measured on 2026-09-27 on
-MacBook-Pro-Tetiana-2: OpenMM **8.5.2**, ParmEd **4.3.1**, RDKit **2025.09.6**, NumPy **2.4.6**,
-Python 3.11. **Verified.**
+Declared in `env/environment.yml` (conda env `msld`). Versions measured on 2026-10-29 on
+MacBook-Pro-Tetiana-2: OpenMM **8.6.1**, ParmEd **4.3.1**, RDKit **2025.09.6**, NumPy **2.4.6**,
+Python 3.11.15. **Verified.** Platforms: Reference, CPU, OpenCL (`openmm.testInstallation` passes).
+
+**2026-10-29:** `openmm` is pinned to **8.6.1** in `env/environment.yml` ([[AUD-002 OpenMM 8.6 impact on MSLD|AUD-002]]).
+The Mac env was updated from 8.5.2 ([[TASK-079 Update the Mac env to OpenMM 8.6.1|TASK-079]]); all 33 tests pass on
+8.6.1, as they did on 8.5.2 (2026-09-27).
 
 | package | used for | used in |
 |---|---|---|
