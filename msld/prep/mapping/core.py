@@ -378,7 +378,7 @@ class ManualMapper(Mapper):
 # CoreMapping(s) -> MSLDModel
 # ---------------------------------------------------------------------
 def model_from_mappings(n_atoms: int, mappings, *, fnex: float = 5.5,
-                        add_restraints: bool = True,
+                        add_restraints: bool = False,
                         block_options: dict | None = None) -> MSLDModel:
     """Assemble an ordered sequence of per-site CoreMappings into a finalized MSLDModel.
 
@@ -391,7 +391,10 @@ def model_from_mappings(n_atoms: int, mappings, *, fnex: float = 5.5,
     (full strength, never lambda-scaled) - this includes the rest of the protein and all
     explicit solvent and ions.
 
-    CATS centroid restraints are added per block when `add_restraints` is set. A
+    Per-block centroid restraints are added only when `add_restraints` is set (default off,
+    ISS-001 / ADR-0033): they are NOT BLaDE's CATS (which groups equivalent atoms across
+    substituents), and on a switched-off block (lambda ~ 0, its own LJ gone) they pull the side
+    chain onto itself, driving its full-strength dU/dlambda to ~1e6 kJ/mol. A
     single-atom block is skipped: the restraint is realized as pairwise harmonic terms
     and is undefined for fewer than two atoms.
 
@@ -420,7 +423,7 @@ def model_from_mappings(n_atoms: int, mappings, *, fnex: float = 5.5,
             model.add_block(site=site_index, atoms=atoms,
                             **block_options.get(name, {}))
 
-    # CATS restraints: keep each block near its own centroid (skip single-atom blocks)
+    # optional per-block centroid restraints (skip single-atom blocks); see docstring
     if add_restraints:
         for mapping in mappings:
             for name in mapping.block_names:

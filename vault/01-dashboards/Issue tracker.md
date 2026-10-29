@@ -17,7 +17,7 @@ SORT severity ASC, id ASC
 <!-- BEGIN GENERATED -->
 | issue | title | status | severity | kind | confidence | fixed by |
 |---|---|---|---|---|---|---|
-| [[ISS-001 Atom restraint groups have the wrong meaning\|ISS-001]] | Atom restraint groups have the wrong meaning | open | high | bug | source | [[TASK-031 Rebuild atom restraint groups\|TASK-031]] |
+| [[ISS-001 Atom restraint groups have the wrong meaning\|ISS-001]] | Atom restraint groups have the wrong meaning | investigating | high | bug | source | [[TASK-031 Rebuild atom restraint groups\|TASK-031]] |
 | [[ISS-002 Theta mass convention differs from BLaDE\|ISS-002]] | Theta mass convention differs from BLaDE | investigating | high | divergence | inferred | [[TASK-032 Resolve BLaDE theta units\|TASK-032]], [[TASK-033 Rerun MDM2 with reference theta parameters\|TASK-033]] |
 | [[ISS-012 No validation at partial lambda\|ISS-012]] | No validation at partial lambda | open | high | risk | confirmed | [[TASK-067 NumPy partial-lambda oracle tests\|TASK-067]], [[TASK-043 BLaDE fixed-lambda cross-check\|TASK-043]] |
 | [[ISS-018 Theta runs hot in MDM2\|ISS-018]] | Theta runs hot in MDM2 | investigating | high | bug | confirmed | [[TASK-032 Resolve BLaDE theta units\|TASK-032]], [[TASK-033 Rerun MDM2 with reference theta parameters\|TASK-033]] |
@@ -43,5 +43,6 @@ SORT severity ASC, id ASC
 | [[ISS-024 Core-only bonded terms take reference parameters\|ISS-024]] | Core-only bonded terms take reference parameters | open | low | risk | inferred | [[TASK-040 Audit the preparation layer\|TASK-040]] |
 | [[ISS-025 NBFIX recovery assumes the OpenMM table convention\|ISS-025]] | NBFIX recovery assumes the OpenMM table convention | open | low | risk | source | [[TASK-040 Audit the preparation layer\|TASK-040]] |
 | [[ISS-026 Constrained atoms run below the bath temperature\|ISS-026]] | Constrained atoms run below the bath temperature | fixed | medium | bug | confirmed | [[ADR-0044 Own SHAKE in the Python driver\|ADR-0044]] |
+| [[ISS-027 Solvated hybrids get wrong variant bonded parameters\|ISS-027]] | Solvated hybrids get wrong variant bonded parameters | fixed | critical | bug | confirmed | |
 <!-- END GENERATED -->
 

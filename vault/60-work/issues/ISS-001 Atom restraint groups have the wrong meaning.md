@@ -2,7 +2,7 @@
 id: ISS-001
 type: issue
 title: Atom restraint groups have the wrong meaning
-status: open
+status: investigating
 kind: bug
 severity: high
 confidence: source
@@ -11,7 +11,7 @@ affects: ["[[Atom restraint module]]", "[[Mapping component]]"]
 requirements: ["[[REQ-014 Atom restraints between substituents|REQ-014]]"]
 fixed_by: ["[[TASK-031 Rebuild atom restraint groups|TASK-031]]"]
 found: 2026-09-26
-updated: 2026-09-27
+updated: 2026-10-29
 ---
 # ISS-001 — Atom restraint groups have the wrong meaning (audit F1)
 
@@ -30,3 +30,8 @@ centroid. BLaDE groups are **equivalent atoms across substituents** — one atom
 **Fix.** [[ADR-0033 Atom restraints group equivalent atoms|ADR-0033]] → [[TASK-031 Rebuild atom restraint groups|TASK-031]]: default off now; equivalent-atom groups from the core
 correspondence where substituents duplicate atoms.
 
+**Update 2026-10-29 (AUD-003).** Confirmed on MDM2: with the per-block groups on, a switched-off side
+chain (own LJ scaled to ~0) is pulled onto its centroid and its full-strength intra-block LJ and 1-4
+terms reach ~1e6 kJ/mol. With them off (and ISS-027 fixed) the off-state dU/dλ is tens of kJ/mol and
+the variants mix. `model_from_mappings(add_restraints=...)` now defaults to False (ADR-0033 step 3);
+equivalent-atom groups are still to do (TASK-031).

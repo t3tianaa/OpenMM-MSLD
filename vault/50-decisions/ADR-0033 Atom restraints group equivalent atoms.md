@@ -2,7 +2,7 @@
 id: ADR-0033
 type: adr
 title: Atom restraints group equivalent atoms
-status: proposed
+status: accepted
 date: 2026-09-27
 deciders: [Tetiana]
 affects: ["[[Atom restraint module]]", "[[Mapping component]]"]
@@ -32,3 +32,4 @@ CHARMM's 59.2·n/(n−1) convention).
   substituent; check whether ALF-generated protein inputs use `restrain` for side-chain sites.
 - Re-run MDM2 without restraints and compare geometry/energies ([[TASK-031 Rebuild atom restraint groups|TASK-031]]).
 
+**2026-10-29.** Step 3 done: `add_restraints` defaults to False (MDM2 evidence in [[ISS-001 Atom restraint groups have the wrong meaning|ISS-001]]). Equivalent-atom groups remain open.

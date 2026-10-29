@@ -46,7 +46,7 @@ estimates. ADR-0031+ are current.
 | [[ADR-0030 Hard dependencies and a ParmEd-free engine\|ADR-0030]] | Hard dependencies; engine stays ParmEd-free | accepted |
 | [[ADR-0031 Project knowledge system in an Obsidian vault\|ADR-0031]] | Project knowledge system: Obsidian vault in git, ADRs, IDs | accepted |
 | [[ADR-0032 Three subsystems preparation simulation analysis\|ADR-0032]] | Three subsystems: preparation, simulation, analysis | accepted |
-| [[ADR-0033 Atom restraints group equivalent atoms\|ADR-0033]] | Atom restraints group equivalent atoms across substituents | proposed |
+| [[ADR-0033 Atom restraints group equivalent atoms\|ADR-0033]] | Atom restraints group equivalent atoms across substituents | accepted (step 3: restraints off by default) |
 | [[ADR-0034 Adopt published ALF and two-leg ddG\|ADR-0034]] | Adopt the published ALF and a two-leg ΔΔG analysis | proposed |
 | [[ADR-0035 Gate plugin work\|ADR-0035]] | Gate plugin work behind the θ-unit check and a BLaDE cross-check | proposed |
 | [[ADR-0036 Same-site reciprocal-space convention\|ADR-0036]] | Same-site reciprocal-space convention | proposed |

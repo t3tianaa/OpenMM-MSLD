@@ -77,7 +77,7 @@ def test_mapping_rejects_buffer_outside_env():
 
 # --------------------------------------------------------------- model_from_mappings
 def test_single_site_model():
-    model = model_from_mappings(12, [_site1()])
+    model = model_from_mappings(12, [_site1()], add_restraints=True)
     assert model.n_blocks == 3                       # env + A + B
     assert model.n_sites == 2                        # site 0 (env) + site 1
     assert model.blocks_per_site == [1, 2]
@@ -92,7 +92,7 @@ def test_single_site_model():
 
 
 def test_two_site_model():
-    model = model_from_mappings(12, [_site1(), _site2()])
+    model = model_from_mappings(12, [_site1(), _site2()], add_restraints=True)
     assert model.n_blocks == 5                       # env + A,B (site1) + C,D (site2)
     assert model.n_sites == 3
     assert model.blocks_per_site == [1, 2, 2]
@@ -102,6 +102,9 @@ def test_two_site_model():
     assert model.atom_block[9] == 4 and model.atom_block[11] == 4  # block D
     # CATS restraints: A={4,5}, C={7,8}, D={9,10,11}; B is single-atom -> skipped
     assert model.atom_restraints == [[4, 5], [7, 8], [9, 10, 11]]
+    # off by default (ISS-001 / ADR-0033): per-block centroid groups pull a switched-off side
+    # chain onto itself
+    assert model_from_mappings(12, [_site1(), _site2()]).atom_restraints == []
 
 
 def test_block_options_passthrough():

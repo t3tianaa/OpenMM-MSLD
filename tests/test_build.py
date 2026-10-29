@@ -180,6 +180,33 @@ def test_build_msld_system_ingests_monomer_variant_from_pdb():
     assert bundle.mapping.sites[0].blocks["SER"]             # SER side chain grafted as a block
 
 
+def _bonded_terms(structure, n):
+    """Bonded terms among the first n atoms with their parameters, order-independent."""
+    b = sorted((x.atom1.idx, x.atom2.idx, round(x.type.req, 4), round(x.type.k, 3))
+               for x in structure.bonds if x.atom1.idx < n and x.atom2.idx < n)
+    a = sorted((x.atom1.idx, x.atom2.idx, x.atom3.idx, round(x.type.theteq, 3), round(x.type.k, 3))
+               for x in structure.angles if x.atom1.idx < n)
+    d = sorted((x.atom1.idx, x.atom2.idx, x.atom3.idx, x.atom4.idx, round(x.type.phi_k, 4),
+                x.type.per, round(x.type.phase, 2)) for x in structure.dihedrals if x.atom1.idx < n)
+    return b, a, d
+
+
+def test_solvated_build_keeps_variant_bonded_parameters():
+    """Regression: the merge copied variant parameter types into the hybrid without re-owning
+    them, so solvate's Structure copy re-resolved each by a stale index and the variant's bonds,
+    angles and torsions picked up unrelated environment types (MDM2: every ILE bond r0 = 1.09 A).
+    """
+    st, ser, _ = _fixture()
+    sites = [Site(residue=3, variants={"SER": ser}, mapper="backbone")]
+    dry = build_msld_system(environment=st, sites=sites, renormalize=False, solvate=False)
+    wet = build_msld_system(environment=st, sites=sites, renormalize=False, solvate=True,
+                            solvate_kwargs=dict(padding=0.6, ion_conc=0.0))
+    n = len(dry.structure.atoms)
+    for kind, x, y in zip(("bonds", "angles", "dihedrals"),
+                          _bonded_terms(dry.structure, n), _bonded_terms(wet.structure, n)):
+        assert x == y, (kind, [(p, q) for p, q in zip(x, y) if p != q][:3])
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

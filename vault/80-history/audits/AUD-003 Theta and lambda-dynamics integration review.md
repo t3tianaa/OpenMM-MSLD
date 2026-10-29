@@ -24,3 +24,13 @@ Numerical review of `LambdaDynamics` on a PME TIP3P toy (Reference, CPU, Apple O
 3. FD noise is roundoff ∝ 1/h, 17.7 kJ/mol rms at 27k atoms on fp32 OpenCL → [[ADR-0045 Analytic biases and a large FD step|ADR-0045]].
 4. Smaller: `Block.fixed` freezes θ not λ (doc fixed); cached forces must be invalidated after
    outside changes (`invalidate_forces()`); no atom-temperature diagnostic (`atom_temperature()` added).
+
+## Addendum (2026-10-29, MDM2 after soft-core)
+Soft-core did not lower the off-state dU/dλ on MDM2 (still 2–5e6). Per-force breakdown: the
+block's own LJ (~60%) and its λ-scaled 1-4 exceptions (~40%) of a side chain collapsed onto itself.
+Two prep bugs caused it: [[ISS-027 Solvated hybrids get wrong variant bonded parameters|ISS-027]]
+(wrong bonded types after solvation) and the per-block centroid restraints of
+[[ISS-001 Atom restraint groups have the wrong meaning|ISS-001]]. With both fixed: off-state dU/dλ
+tens of kJ/mol, after 1.5 ps λ = WT 0.48, VAL 0.38, others 0.04–0.06; T_θ 272 K.
+Correction: the water toy's "1e5" medians in the first report came from flexible water whose
+λ-scaled bonds stretch; rigid water gives ~1e3 (max 2.6e5).

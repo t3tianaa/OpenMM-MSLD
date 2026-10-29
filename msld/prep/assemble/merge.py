@@ -58,6 +58,10 @@ class _TypeCache:
         if key not in self._seen:
             nt = copy.copy(t)          # detach from the source structure
             base_list.append(nt)
+            # the copy still points at the variant's type list, so its .idx would index THAT list;
+            # Structure copy / `+` (e.g. solvate) rebuild terms from base.<types>[t.idx] and would
+            # silently pick up an unrelated base type. Re-own every type in the base list.
+            base_list.claim()
             self._seen[key] = nt
         return self._seen[key]
 
