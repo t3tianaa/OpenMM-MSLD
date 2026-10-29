@@ -36,7 +36,8 @@ class Block:
     theta_mass: float = 5.0          # amu (usually 5)
     theta_friction: float = 1.0      # ps^-1 (per-block Langevin friction)
     lambda_bias: float = 0.0         # fixed linear bias coefficient on lambda
-    fixed: bool = False              # freeze lambda (FEP-style window)
+    fixed: bool = False              # freeze THETA. lambda is fixed only if every block of the
+                                     # site is fixed (the softmax renormalizes over the site)
 
 
 @dataclass
@@ -71,6 +72,11 @@ class MSLDModel:
         # atom restraints (CATS): keep each listed group near its own centroid.
         self.atom_restraints: list[list[int]] = []
         self.k_restraint = 24769.0        # kJ/mol/nm^2 (BLaDE default 59.2 kcal/mol/A^2)
+        # soft-core for overlap-prone nonbonded pairs (block<->env, block<->block across sites):
+        # Beutler alpha for LJ and Coulomb, and the fixed Coulomb soft-core length (nm).
+        # alpha = 0 restores plain linear lambda scaling.
+        self.softcore_alpha = 0.5
+        self.softcore_sigma_q = 0.3
         self._finalized = False
 
     def add_block(self, site: int, atoms, **kw) -> int:

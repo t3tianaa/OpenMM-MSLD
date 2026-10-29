@@ -2,7 +2,7 @@
 id: ISS-010
 type: issue
 title: Finite-difference dU/dlambda noisy in single precision
-status: open
+status: investigating
 kind: design-flaw
 severity: medium
 confidence: inferred
@@ -11,7 +11,7 @@ affects: ["[[Force groups and derivative routing]]", "[[Electrostatics scaling m
 requirements: ["[[REQ-020 Accurate dU-dlambda for every term|REQ-020]]"]
 fixed_by: ["[[TASK-041 Analytic bias derivatives|TASK-041]]", "[[TASK-059 Plugin S1 Reference nonbonded force|TASK-059]]"]
 found: 2026-09-26
-updated: 2026-09-27
+updated: 2026-10-29
 ---
 # ISS-010 — Finite-difference dU/dλ of the whole group 0 is noisy in single precision (audit F10)
 
@@ -24,3 +24,4 @@ Reference (double) is exact, but MDM2 ran on Apple OpenCL (fp32 only). Each step
 Cheap improvement: analytic bias derivatives ([[TASK-041 Analytic bias derivatives|TASK-041]]). Real fix: analytic electrostatics
 ([[FEAT-033 Analytic nonbonded plugin force|FEAT-033]]).
 
+**Update 2026-10-29 (AUD-003).** Measured: roundoff ∝ 1/h, 17.7 kJ/mol rms at 27k atoms on fp32 OpenCL with h = 1e-4. Biases are now analytic and the default h is 1e-2 ([[ADR-0045 Analytic biases and a large FD step|ADR-0045]]): ~0.24 kJ/mol. Remaining: the FD itself (plugin).

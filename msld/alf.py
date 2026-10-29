@@ -165,7 +165,7 @@ def flatten(dyn, *, couple: bool = True, n_iters: int = 20, steps_per_iter: int 
                 vb.k += dk
 
         set_biases(dyn.context, model)      # push updated coefficients into the live Context
-        dyn._F = None                       # forces depend on the biases -> recompute next step
+        dyn.invalidate_forces()             # forces depend on the biases -> recompute next step
         bias_history.append({b: model.blocks[b].lambda_bias for b in range(1, model.n_blocks)})
         coupling_history.append([vb.k for vb in model.variable_biases])
 

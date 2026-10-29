@@ -445,8 +445,14 @@ def add_scaled_electrostatics(system: mm.System, model) -> mm.NonbondedForce | N
 # never interact. Plain environment-environment LJ remains in NonbondedForce.
 # CustomNonbondedForce does expose dU/dlambda.
 #
-# Currently disabled (see vault FEAT-031 Soft-core, EXP-005): soft-core and the long-range dispersion
-# correction.
+# Soft-core (model.softcore_alpha > 0, the default): pairs that can overlap -- block<->env and
+# block<->block across sites -- use the Beutler form
+#     U = L * 4*eps * [1/s^2 - 1/s],   s = (r/sigma)^6 + alpha*(1 - L)
+# with L the pair's lambda product. At L = 1 this is plain LJ (lambda = 1 reproduces the base
+# System); as L -> 0 it stays finite at r = 0, so a switched-off block that solvent has filled
+# has a bounded dU/dlambda instead of the r^-12 wall (1e5-1e6 kJ/mol without it). Within-block
+# pairs keep plain LJ: their geometry is held by the block's own bonded terms.
+# Still disabled (see vault EXP-005): the long-range dispersion correction.
 
 
 def _match_nonbonded_method(cnbf: mm.CustomNonbondedForce, nbf: mm.NonbondedForce):
@@ -471,6 +477,20 @@ _LJ_EXPR = ("*4*epsilon*((sigma/r)^12-(sigma/r)^6);"
             "sigma=0.5*(sigma1+sigma2); epsilon=sqrt(epsilon1*epsilon2)")
 
 
+def _softcore_lj_expr(prefix: str, alpha: float) -> str:
+    """Beutler soft-core LJ scaled by L = prefix; `blk` per-particle flags same-block pairs,
+    which stay plain (soft-core term switched off by delta(blk1-blk2))."""
+    return (f"L*4*epsilon*(1/s^2-1/s);"
+            f"s=(r/sigma)^6+({alpha})*(1-L)*(1-delta(blk1-blk2));"
+            f"L={prefix};"
+            "sigma=0.5*(sigma1+sigma2); epsilon=sqrt(epsilon1*epsilon2)")
+
+
+def softcore_alpha(model) -> float:
+    """Soft-core strength of the model (0 = plain linear scaling)."""
+    return float(getattr(model, "softcore_alpha", 0.0) or 0.0)
+
+
 def add_scaled_lj(system: mm.System, model) -> list[mm.CustomNonbondedForce]:
     """Move all alchemical-involving LJ from the NonbondedForce into grouped,
     block-scaled CustomNonbondedForce(s). env<->env LJ stays put. Returns the
@@ -492,14 +512,21 @@ def add_scaled_lj(system: mm.System, model) -> list[mm.CustomNonbondedForce]:
     env_atoms = [i for i in range(npart) if model.atom_block[i] == 0]
     block_atoms = {b: list(model.blocks[b].atoms) for b in alch}
 
+    alpha = softcore_alpha(model)
+
     def _make(sig_tuple):
-        f = mm.CustomNonbondedForce(_lambda_prefix(sig_tuple) + _LJ_EXPR)
+        if alpha > 0.0:
+            f = mm.CustomNonbondedForce(_softcore_lj_expr(_lambda_prefix(sig_tuple), alpha))
+        else:
+            f = mm.CustomNonbondedForce(_lambda_prefix(sig_tuple) + _LJ_EXPR)
         f.setName("MSLDLJ_" + "_".join(map(str, sig_tuple)))
         _match_nonbonded_method(f, nbf)
         f.addPerParticleParameter("sigma")
         f.addPerParticleParameter("epsilon")
-        for s, e in lj:
-            f.addParticle([s, e])
+        if alpha > 0.0:
+            f.addPerParticleParameter("blk")
+        for i, (s, e) in enumerate(lj):
+            f.addParticle([s, e, float(model.atom_block[i])] if alpha > 0.0 else [s, e])
         for a, c in excl:
             f.addExclusion(a, c)
         _register_lambdas(f, sig_tuple)         # globals + analytic dU/dlambda
@@ -532,6 +559,87 @@ def add_scaled_lj(system: mm.System, model) -> list[mm.CustomNonbondedForce]:
             q, sig, eps = nbf.getParticleParameters(i)
             nbf.setParticleParameters(i, q, sig, 0.0)
     nbf.setUseDispersionCorrection(False)       # deferred
+    return created
+
+
+def _direct_space_screen(nbf: mm.NonbondedForce):
+    """Real-space Coulomb kernel g(x) of the NonbondedForce (U_pair = KE*q1*q2*g(r)), as an
+    OpenMM expression template in `{x}`, plus the CustomNonbondedForce method and cutoff."""
+    NB, CN = mm.NonbondedForce, mm.CustomNonbondedForce
+    method = nbf.getNonbondedMethod()
+    if method == NB.NoCutoff:
+        return "1/{x}", CN.NoCutoff, None
+    rc = nbf.getCutoffDistance().value_in_unit(_NM)
+    if method in (NB.PME, NB.Ewald, NB.LJPME):
+        alpha = math.sqrt(-math.log(2.0 * nbf.getEwaldErrorTolerance())) / rc
+        return f"erfc({alpha}*{{x}})/{{x}}", CN.CutoffPeriodic, rc
+    # reaction field (CutoffPeriodic / CutoffNonPeriodic); its constant shift cancels in a difference
+    eps = nbf.getReactionFieldDielectric()
+    krf = (eps - 1.0) / ((2.0 * eps + 1.0) * rc ** 3)
+    cn = CN.CutoffPeriodic if method == NB.CutoffPeriodic else CN.CutoffNonPeriodic
+    return f"(1/{{x}}+{krf}*{{x}}^2)", cn, rc
+
+
+def add_softcore_electrostatics(system: mm.System, model, charges) -> list:
+    """Soft-core the direct-space Coulomb of pairs that can overlap (block<->env, and block<->block
+    across sites), as a correction on top of the lambda-scaled NonbondedForce:
+
+        dU = L*KE*q1*q2*[g(r_sc) - g(r)],   r_sc = (r^6 + alpha*(1-L)*sigma_q^6)^(1/6)
+
+    so that NonbondedForce + correction = soft-core real space + unchanged (smooth) reciprocal
+    space. At L = 1 the correction is exactly 0. `charges` are the RAW (unscaled) charges. Must run
+    after add_scaled_electrostatics (same-site exclusions) so the exclusion set matches the base
+    force. Without it, LJ soft-core alone lets opposite charges collapse onto each other.
+    """
+    alpha = softcore_alpha(model)
+    nbfs = _forces_of_type(system, mm.NonbondedForce)
+    if alpha <= 0.0 or not nbfs:
+        return []
+    nbf = nbfs[0]
+    sig6 = float(getattr(model, "softcore_sigma_q", 0.3)) ** 6
+    screen, cn_method, cutoff = _direct_space_screen(nbf)
+    excl = sorted(_existing_exception_pairs(nbf))
+    alch = _alch_blocks(model)
+    env_atoms = [i for i in range(model.n_atoms) if model.atom_block[i] == 0]
+    block_atoms = {b: list(model.blocks[b].atoms) for b in alch}
+    charged = {b: any(charges[a] != 0.0 for a in block_atoms[b]) for b in alch}
+
+    def _make(sig_tuple):
+        prefix = _lambda_prefix(sig_tuple)
+        f = mm.CustomNonbondedForce(
+            f"L*{_KE}*q1*q2*({screen.format(x='rsc')}-{screen.format(x='r')});"
+            f"rsc=(r^6+({alpha})*(1-L)*{sig6})^(1/6);"
+            f"L={prefix}")
+        f.setName("MSLDSCElec_" + "_".join(map(str, sig_tuple)))
+        f.addPerParticleParameter("q")
+        for q in charges:
+            f.addParticle([q])
+        for a, c in excl:
+            f.addExclusion(a, c)
+        f.setNonbondedMethod(cn_method)
+        if cutoff is not None:
+            f.setCutoffDistance(cutoff * _NM)
+        f.setUseLongRangeCorrection(False)
+        _register_lambdas(f, sig_tuple)
+        return f
+
+    env_charged = any(charges[a] != 0.0 for a in env_atoms)
+    created = []
+    for b in alch:
+        if env_atoms and env_charged and charged[b]:
+            f = _make((b,))
+            f.addInteractionGroup(env_atoms, block_atoms[b])
+            system.addForce(f)
+            created.append(f)
+    for x in range(len(alch)):
+        for y in range(x + 1, len(alch)):
+            b, c = alch[x], alch[y]
+            if model.blocks[b].site == model.blocks[c].site or not (charged[b] and charged[c]):
+                continue
+            f = _make((b, c))
+            f.addInteractionGroup(block_atoms[b], block_atoms[c])
+            system.addForce(f)
+            created.append(f)
     return created
 
 
@@ -579,6 +687,10 @@ def add_scaled_charmm_lj(system: mm.System, model) -> list[mm.CustomNonbondedFor
                  and not (system.getForce(i).getName() or "").startswith("MSLD")
                  and system.getForce(i).getNumParticles() == npart]
 
+    if originals and softcore_alpha(model) > 0.0:
+        import warnings
+        warnings.warn("soft-core is not implemented for tabulated (CHARMM/NBFIX) LJ; those block "
+                      "LJ terms use plain linear lambda scaling", stacklevel=2)
     for f in originals:
         expr = f.getEnergyFunction()
         per_params = [f.getPerParticleParameterName(k)
@@ -701,9 +813,11 @@ def add_scaled_14_exceptions(system: mm.System, model) -> int:
 # ---------------------------------------------------------------------
 # MSLD needs biases on lambda to flatten the landscape (ALF). These are pure
 # functions of the lambda globals -- no atom positions -- so we add ONE
-# CustomExternalForce on a dummy particle whose energy is the whole bias sum
-# written in terms of lambda{b}. Its atom force is zero (no x,y,z in the
-# expression); its dU/dlambda is picked up by the finite-difference (group-0) gradient.
+# one-particle CustomCompoundBondForce whose energy is the whole bias sum written in
+# terms of lambda{b}. Its atom force is zero (no position in the expression), and unlike
+# CustomExternalForce it supports addEnergyParameterDerivative, so dU/dlambda of the
+# biases is analytic. That keeps the finite-difference remainder purely quadratic in
+# lambda (the NonbondedForce), which is what lets the integrator use a large FD step.
 #
 # Fixed bias : sum_b  bias_b * lambda_b            (linear)
 # Variable   : ALF coupling biases between two blocks i, j (BLaDE types):
@@ -735,14 +849,13 @@ def _variable_bias_term(vb, kname) -> str:
         f"variable bias type {vb.type} not implemented (have 6, 8, 10)")
 
 
-def add_biases(system: mm.System, model) -> mm.CustomExternalForce | None:
+def add_biases(system: mm.System, model) -> mm.CustomCompoundBondForce | None:
     """Add fixed + variable lambda biases as one position-independent force.
 
     Every bias COEFFICIENT is a Context global parameter (`biascoef{b}` for the fixed linear bias,
     `biask{m}` for the m-th variable bias), initialized to the model's current value -- so ALF can
     retune them live with `builder.set_biases` (no System/Context rebuild). The λ globals appear in
-    the expression; CustomExternalForce cannot expose the derivative, so the bias gradient is picked
-    up by the integrator's group-0 finite difference (with the electrostatics and any injected term).
+    the expression with addEnergyParameterDerivative, so the bias gradient is analytic.
 
     Returns the force, or None if there is nothing to add. With `model.bias_flattening` set, a
     tunable fixed-bias term is created for EVERY alchemical block even at coefficient 0, so ALF has
@@ -766,13 +879,14 @@ def add_biases(system: mm.System, model) -> mm.CustomExternalForce | None:
     if not terms:
         return None
 
-    f = mm.CustomExternalForce(" + ".join(terms))
+    f = mm.CustomCompoundBondForce(1, " + ".join(terms))
     f.setName("MSLDBias")
     for name, val in coefs:
         f.addGlobalParameter(name, val)          # tunable coefficient globals
     for b in sorted(lam_refs):
         f.addGlobalParameter(lambda_name(b), 1.0)
-    f.addParticle(0, [])          # dummy anchor; energy does not depend on its position
+        f.addEnergyParameterDerivative(lambda_name(b))   # analytic dU/dlambda of the bias
+    f.addBond([0], [])            # dummy anchor; energy does not depend on its position
     system.addForce(f)
     return f
 
