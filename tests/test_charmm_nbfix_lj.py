@@ -53,8 +53,9 @@ def _energy_and_derivs(system, pos, lambdas):
     return e, d
 
 
-def _model():
+def _model(softcore_alpha=0.0):
     m = MSLDModel(3)
+    m.softcore_alpha = softcore_alpha    # 0: the plain linear-lambda formulas below
     m.add_block(site=1, atoms=[1])       # block A (real LJ)
     m.add_block(site=1, atoms=[2])       # block B (zero LJ)
     return m.finalize()
@@ -105,6 +106,58 @@ def test_amber_path_is_noop_on_plain_lj():
     system.addForce(nbf)
     m = _model()
     assert add_scaled_charmm_lj(system, m) == []
+
+
+def test_charmm_lj_softcore_matches_beutler_form():
+    # soft-core on the tabulated LJ: the env<->A NBFIX pair at lambda_A = L must follow
+    # U = L * 4 eps (1/s^2 - 1/s), s = (r/sigma)^6 + alpha (1 - L), with sigma and eps the PAIR's
+    # (NBFIX) values from its acoef/bcoef. lambda = 1 is still the base energy.
+    s = _nbfix_structure()
+    pos = [mm.Vec3(*xyz) for xyz in (np.array(s.coordinates) / 10.0)] * unit.nanometer
+    base = s.createSystem(nonbondedMethod=app.NoCutoff)
+    e_base, _ = _energy_and_derivs(base, pos, [])
+    scaled = s.createSystem(nonbondedMethod=app.NoCutoff)
+    alpha = 0.5
+    scale_msld_system(scaled, _model(softcore_alpha=alpha))
+    e_one, _ = _energy_and_derivs(scaled, pos, [1.0, 1.0, 1.0])
+    assert abs(e_one - e_base) < 1e-6 * max(1.0, abs(e_base)), (e_one, e_base)
+
+    sigma = 3.6 * 2 ** (-1 / 6) / 10.0                    # NBFIX Rmin 3.6 A -> sigma (nm)
+    eps = 0.25 * 4.184                                     # kcal/mol -> kJ/mol
+    r = 0.34
+    for L in (0.4, 0.05):
+        e, d = _energy_and_derivs(scaled, pos, [1.0, L, 1.0])
+        sc = (r / sigma) ** 6 + alpha * (1 - L)
+        ref = L * 4 * eps * (1 / sc ** 2 - 1 / sc)
+        assert abs(e - ref) < 1e-6 * max(1.0, abs(ref)), (L, e, ref)
+        h = 1e-6
+        dref = ((L + h) * 4 * eps * (1 / ((r / sigma) ** 6 + alpha * (1 - L - h)) ** 2
+                                     - 1 / ((r / sigma) ** 6 + alpha * (1 - L - h)))
+                - (L - h) * 4 * eps * (1 / ((r / sigma) ** 6 + alpha * (1 - L + h)) ** 2
+                                       - 1 / ((r / sigma) ** 6 + alpha * (1 - L + h)))) / (2 * h)
+        assert abs(d["lambda1"] - dref) < 1e-5 * max(1.0, abs(dref)), (L, d["lambda1"], dref)
+
+
+def test_charmm_lj_shares_exclusions_with_nonbonded_force():
+    # the CPU/OpenCL/CUDA platforms need one exclusion set on every nonbonded force; the
+    # tabulated LJ copies used to miss the same-site exclusions added to the NonbondedForce,
+    # so a CHARMM/NBFIX MSLD System could only run on Reference.
+    s = _nbfix_structure()
+    pos = [mm.Vec3(*xyz) for xyz in (np.array(s.coordinates) / 10.0)] * unit.nanometer
+    scaled = s.createSystem(nonbondedMethod=app.NoCutoff)
+    scale_msld_system(scaled, _model(softcore_alpha=0.5))
+    sets = []
+    for f in scaled.getForces():
+        if isinstance(f, mm.NonbondedForce):
+            sets.append({tuple(sorted(f.getExceptionParameters(k)[:2]))
+                         for k in range(f.getNumExceptions())})
+        elif isinstance(f, mm.CustomNonbondedForce):
+            sets.append({tuple(sorted(f.getExclusionParticles(k)))
+                         for k in range(f.getNumExclusions())})
+    assert (1, 2) in sets[0] and all(x == sets[0] for x in sets), sets
+    ctx = mm.Context(scaled, mm.VerletIntegrator(0.001), mm.Platform.getPlatform("CPU"))
+    ctx.setPositions(pos)
+    ctx.getState(getEnergy=True)
 
 
 if __name__ == "__main__":

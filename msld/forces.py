@@ -685,6 +685,24 @@ def _copy_tabulated(fn):
     raise NotImplementedError(f"cannot copy tabulated function of type {type(fn).__name__}")
 
 
+def _is_parmed_ab_table(per_params, tabs) -> bool:
+    """True for ParmEd's tabulated LJ: U = (a/r^6)^2 - b/r^6 with a = acoef(type1, type2),
+    b = bcoef(type1, type2) (a^2 = 4 eps sigma^12, b = 4 eps sigma^6, NBFIX already folded in)."""
+    return per_params == ["type"] and {n for n, _ in tabs} == {"acoef", "bcoef"}
+
+
+def _softcore_ab_expr(prefix: str, alpha: float) -> str:
+    """Beutler soft-core in ParmEd's acoef/bcoef form, the tabulated analogue of
+    _softcore_lj_expr: 4 eps = b^2/a^2 and sigma^6 = a^2/b per PAIR, so NBFIX pairs soften with
+    their own sigma. Same-block pairs (delta(blk1-blk2) = 1) stay plain: L*(a^2/r^12 - b/r^6).
+    A pair with b = 0 (zero-LJ types) keeps the plain form, which is then 0 or pure repulsion."""
+    return (f"L*select(bb, (bb*bb/a2)*(1/(s*s)-1/s), a2/(r6*r6)-bb/r6);"
+            f"s=r6*bb/a2+({alpha})*(1-L)*(1-delta(blk1-blk2));"
+            f"a2=aa*aa+1e-30; r6=r^6;"
+            f"aa=acoef(type1, type2); bb=bcoef(type1, type2);"
+            f"L={prefix}")
+
+
 def add_scaled_charmm_lj(system: mm.System, model) -> list[mm.CustomNonbondedForce]:
     """Block-scale a CHARMM-style tabulated LJ CustomNonbondedForce. No-op on Amber."""
     created = []
@@ -702,10 +720,11 @@ def add_scaled_charmm_lj(system: mm.System, model) -> list[mm.CustomNonbondedFor
                  and not (system.getForce(i).getName() or "").startswith("MSLD")
                  and system.getForce(i).getNumParticles() == npart]
 
-    if originals and softcore_alpha(model) > 0.0:
-        import warnings
-        warnings.warn("soft-core is not implemented for tabulated (CHARMM/NBFIX) LJ; those block "
-                      "LJ terms use plain linear lambda scaling", stacklevel=2)
+    alpha = softcore_alpha(model)
+    # Every nonbonded force must carry the same exclusion set on CPU/OpenCL/CUDA: the
+    # NonbondedForce now also excludes the same-site pairs, so add those here too.
+    nbfs = _forces_of_type(system, mm.NonbondedForce)
+    nb_excl = _existing_exception_pairs(nbfs[0]) if nbfs else set()
     for f in originals:
         expr = f.getEnergyFunction()
         per_params = [f.getPerParticleParameterName(k)
@@ -715,24 +734,37 @@ def add_scaled_charmm_lj(system: mm.System, model) -> list[mm.CustomNonbondedFor
         pvals = [list(f.getParticleParameters(i)) for i in range(npart)]
         tabs = [(f.getTabulatedFunctionName(t), f.getTabulatedFunction(t))
                 for t in range(f.getNumTabulatedFunctions())]
-        excls = [f.getExclusionParticles(k) for k in range(f.getNumExclusions())]
+        own = {tuple(sorted(f.getExclusionParticles(k))) for k in range(f.getNumExclusions())}
+        for a, c in sorted(nb_excl - own):
+            f.addExclusion(a, c)
+        excls = sorted(own | nb_excl)
         method = f.getNonbondedMethod()
         cutoff = f.getCutoffDistance()
         use_switch = f.getUseSwitchingFunction()
         switch = f.getSwitchingDistance()
         main, sep, tail = expr.partition(";")
+        softcore = alpha > 0.0 and _is_parmed_ab_table(per_params, tabs)
+        if alpha > 0.0 and not softcore:
+            import warnings
+            warnings.warn("soft-core needs the ParmEd acoef/bcoef LJ table; this tabulated LJ "
+                          "uses plain linear lambda scaling", stacklevel=2)
 
         def _make(sig_tuple, name):
-            g = mm.CustomNonbondedForce(f"({_lambda_prefix(sig_tuple)})*({main}){sep}{tail}")
+            if softcore:
+                g = mm.CustomNonbondedForce(_softcore_ab_expr(_lambda_prefix(sig_tuple), alpha))
+            else:
+                g = mm.CustomNonbondedForce(f"({_lambda_prefix(sig_tuple)})*({main}){sep}{tail}")
             g.setName(name)
             for pn in per_params:
                 g.addPerParticleParameter(pn)
+            if softcore:
+                g.addPerParticleParameter("blk")
             for gn, dv in gparams:
                 g.addGlobalParameter(gn, dv)
             for tname, tfn in tabs:
                 g.addTabulatedFunction(tname, _copy_tabulated(tfn))
-            for pv in pvals:
-                g.addParticle(pv)
+            for i, pv in enumerate(pvals):
+                g.addParticle(pv + [float(model.atom_block[i])] if softcore else pv)
             for a, c in excls:
                 g.addExclusion(a, c)
             g.setNonbondedMethod(method)
@@ -745,7 +777,8 @@ def add_scaled_charmm_lj(system: mm.System, model) -> list[mm.CustomNonbondedFor
             _register_lambdas(g, sig_tuple)
             return g
 
-        # single-lambda: env<->block b and within block b
+        # single-lambda: env<->block b and within block b (soft-core only between blocks of
+        # different blk, i.e. env<->block; within-block pairs stay plain, as in add_scaled_lj)
         for b in alch:
             g = _make((b,), "MSLDCharmmLJ_%d" % b)
             if env_atoms and block_atoms[b]:
