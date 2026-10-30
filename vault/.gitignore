@@ -1,0 +1,7 @@
+# Obsidian per-device state (keep app.json and templates.json under version control)
+.obsidian/workspace*.json
+.obsidian/cache
+.obsidian/plugins/
+.obsidian/community-plugins.json
+.trash/
+.DS_Store

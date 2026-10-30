@@ -1,0 +1,7 @@
+{
+  "attachmentFolderPath": "00-meta/attachments",
+  "useMarkdownLinks": false,
+  "newLinkFormat": "shortest",
+  "alwaysUpdateLinks": true,
+  "showFrontmatter": true
+}
