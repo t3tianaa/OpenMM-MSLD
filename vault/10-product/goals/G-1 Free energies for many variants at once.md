@@ -14,8 +14,7 @@ environments such as bound vs unbound or folded vs unfolded) for **many** chemic
 Why: this is the whole point of MSLD — combinatorial chemistry at the cost of roughly one
 simulation ([[Multisite lambda dynamics]]).
 
-Success: reproduce published MSLD results (e.g. T4 lysozyme side-chain folding ΔΔG, or an HSP90
-ligand series; see [[BLaDE T4L and HSP90 examples]]) within statistical error.
+Success: reproduce published MSLD results (e.g. T4 lysozyme side-chain folding ΔΔG, or an HSP90 ligand series; see [[BLaDE T4L and HSP90 examples]]) within statistical error.
 
 Derived: [[UC-1 Protein mutation scan|UC-1]], [[UC-2 Ligand R-group scan|UC-2]], [[UC-5 Explore combinatorial chemical space|UC-5]]; requirements in [[Requirements index]].
 

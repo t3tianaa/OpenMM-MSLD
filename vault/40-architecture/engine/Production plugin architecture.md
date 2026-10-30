@@ -6,8 +6,8 @@ layer: L2
 status: planned
 code: []
 requirements: ["[[REQ-011 Soft-core for alchemical nonbonded|REQ-011]]", "[[REQ-019 NPT ensemble|REQ-019]]", "[[REQ-020 Accurate dU-dlambda for every term|REQ-020]]", "[[REQ-029 Production performance on GPU|REQ-029]]"]
-decisions: ["[[ADR-0026 Tier 2 plugin with scope S0 to S4|ADR-0026]]", "[[ADR-0027 Plugin technology choices|ADR-0027]]", "[[ADR-0035 Gate plugin work|ADR-0035]]"]
-updated: 2026-09-27
+decisions: ["[[ADR-0026 Tier 2 plugin with scope S0 to S4|ADR-0026]]", "[[ADR-0027 Plugin technology choices|ADR-0027]]", "[[ADR-0035 Gate plugin work|ADR-0035]]", "[[ADR-0042 OpenMM multistate samplers for fixed-lambda cross-checks|ADR-0042]]"]
+updated: 2026-10-29
 ---
 # Production plugin architecture (Tier 2, planned)
 
@@ -40,10 +40,17 @@ Bonded terms stay as stock custom forces (already analytic); prep and `MSLDModel
 | S0 | skeleton builds, loads on Reference + OpenCL | trivial force = hand calculation |
 | S1 | MSLDNonbondedForce, Reference | λ = 1 invariant; partial-λ energies = Python engine; analytic dU/dλ = Python hybrid |
 | S2 | same force on common/GPU | = S1 within fp32 tolerance; last FD gone |
-| S3 | MSLDIntegrator | T_θ = 300 K; barostat fires; energy conserved at γ = 0 |
+| S3 | MSLDIntegrator | T_θ = 300 K; barostat fires; energy conserved at γ = 0; θ/vθ/biases survive `context.setState()`; has `getTemperature()`; runs under `ReplicaExchangeSampler` ([[ADR-0042 OpenMM multistate samplers for fixed-lambda cross-checks\|ADR-0042]]) |
 | S4 | soft-core | bounded dU/dλ for strained variants; λ = 1 invariant |
 
 Original estimate: 4–7 months part-time. Technology choices: [[ADR-0027 Plugin technology choices|ADR-0027]].
+
+## OpenMM 8.6 multistate samplers ([[AUD-002 OpenMM 8.6 impact on MSLD|AUD-002]], [[ADR-0042 OpenMM multistate samplers for fixed-lambda cross-checks|ADR-0042]], proposed)
+OpenMM 8.6 adds `ReplicaExchangeSampler` / `ExpandedEnsembleSampler`. They swap replicas with
+`context.setState()` and step with `integrator.step()`. If `MSLDIntegrator` keeps θ, vθ and the bias coefficients
+in Context state (integrator parameters/globals) and exposes `getTemperature()`, then **BP-REX**, replica
+checkpoints and MBAR-ready energy output come for free, with no MSLD-specific replica code. 8.6 does **not**
+change S1/S2: `NonbondedForce` still has no λ-derivatives.
 
 ## Gate ([[ADR-0035 Gate plugin work|ADR-0035]], proposed)
 Do not start S0 until: the θ-mass/units question is settled ([[TASK-032 Resolve BLaDE theta units|TASK-032]], [[TASK-033 Rerun MDM2 with reference theta parameters|TASK-033]]) — it may

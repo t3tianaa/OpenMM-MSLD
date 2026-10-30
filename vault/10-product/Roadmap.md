@@ -2,7 +2,7 @@
 title: Roadmap
 type: product
 status: active
-updated: 2026-09-27
+updated: 2026-10-29
 ---
 # Roadmap
 
@@ -31,5 +31,13 @@ recommendation ([[AUD-001 Engine audit of the local working copy|AUD-001]] §6).
 Gates between milestones (from [[ADR-0035 Gate plugin work|ADR-0035]], proposed): no plugin work before M4's θ-mass
 experiment ([[TASK-033 Rerun MDM2 with reference theta parameters|TASK-033]]) and the first M5 cross-check ([[TASK-043 BLaDE fixed-lambda cross-check|TASK-043]]) — otherwise the plugin may
 faithfully reproduce a convention bug, only faster.
+
+**OpenMM 8.6 (2026-10-29, [[AUD-002 OpenMM 8.6 impact on MSLD|AUD-002]]).** Pinned to 8.6.1. Its new `ReplicaExchangeSampler` changes two things
+(proposed in [[ADR-0042 OpenMM multistate samplers for fixed-lambda cross-checks|ADR-0042]]):
+- **M5 gains a second, cheap check.** Fixed-λ HREX + MBAR on our own scaled System, with the stock integrator, NPT
+  and constraints ([[TASK-078 Fixed-lambda replica-exchange cross-check|TASK-078]]). It validates MSLD sampling and gives the in-house FEP-style reference that
+  M8 ([[REQ-071 Agree with FEP or TI on Amber|REQ-071]]) needs, without waiting for BLaDE or the plugin. The BLaDE energy cross-check stays.
+- **M7 plugin integrator keeps θ in Context state**, so BP-REX and replica checkpoints come from OpenMM for free.
+  The plugin scope is otherwise unchanged: 8.6 still has no electrostatic λ-derivatives.
 
 Live task lists: [[Task board]].

@@ -7,9 +7,7 @@ updated: 2026-09-27
 ---
 # G-2 — Physically correct MSLD
 
-The OpenMM implementation computes the **same energy function, the same λ forces and the same
-sampling** as the reference MSLD implementation (BLaDE / CHARMM BLOCK) for the same system and
-settings — or documents, in an ADR, every deliberate difference and its size.
+The OpenMM implementation computes the **same energy function, the same λ forces and the same sampling** as the reference MSLD implementation (BLaDE / CHARMM BLOCK) for the same system and settings — or documents, in an ADR, every deliberate difference and its size.
 
 Why: a fast engine with a subtle convention bug produces confident, wrong free energies.
 

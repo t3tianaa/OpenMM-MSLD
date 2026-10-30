@@ -38,7 +38,7 @@ speed/fidelity is the Tier-2 C++/CUDA plugin.
 ## Environment
 
 ```bash
-conda activate msld          # openmm 8.5 + numpy (see env/environment.yml)
+conda activate msld          # openmm 8.6.1 (pinned) + numpy (see env/environment.yml)
 ```
 
 ## Run the tests
