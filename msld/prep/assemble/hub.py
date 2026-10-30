@@ -97,7 +97,7 @@ class HybridSystemAssembler:
 
     def assemble(self, env_structure, sites, *, renormalize=True,
                  solvate=False, solvate_kwargs=None,
-                 restrip_solvent=True) -> HybridSystemBundle:
+                 restrip_solvent=True, fix_clashes=True) -> HybridSystemBundle:
         """Assemble the hybrid system.
 
         renormalize : run ChargeRenormalization (env averaging + block renorm) per site.
@@ -105,6 +105,11 @@ class HybridSystemAssembler:
         solvate_kwargs : passed to prep.solvate.solvate (padding, water_ff, ion_conc, ...).
         restrip_solvent : if the input env already carries water/ions, strip it before
                           assembly (assembly runs on a DRY solute).
+        fix_clashes : after grafting, try the staggered rotamers of every grafted block that
+                      clashes with the environment (clash.relieve_clashes) and keep the best one.
+                      Every remaining clash is in reports["clashes"]; one deeper than
+                      clash.WARN_OVERLAP is also warned about. LambdaDynamics.minimize() relaxes
+                      and checks the endpoints later.
         """
         reports: dict = {}
 
@@ -116,6 +121,19 @@ class HybridSystemAssembler:
         # 2.1 structure
         hres = self.structure_builder.build(env_structure, sites)
         structure = hres.structure
+
+        # 2.1b clashes of the grafted blocks with the environment (before solvation: water is
+        # placed around whatever geometry the blocks end up in)
+        from .clash import block_clashes, relieve_clashes, format_clash
+        clashes = (relieve_clashes(structure, hres.site_mappings) if fix_clashes
+                   else block_clashes(structure, hres.site_mappings))
+        reports["clashes"] = clashes
+        left = [r for r in clashes if r.severe]
+        if left:
+            import warnings
+            warnings.warn("grafted blocks clash with the environment (minimize() relaxes each "
+                          "endpoint and checks it): " + "; ".join(format_clash(structure, r)
+                                                                   for r in left), stacklevel=2)
 
         # 2.2 charges (per site; each site's own variants drive the env averaging)
         if renormalize:

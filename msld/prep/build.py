@@ -115,7 +115,8 @@ def _resolve_mapper(mapper, reference_name):
 
 
 def build_msld_system(environment, sites, *, forcefield=None, add_hydrogens: bool = False,
-                      renormalize: bool = True, solvate: bool = False, solvate_kwargs=None):
+                      renormalize: bool = True, solvate: bool = False, solvate_kwargs=None,
+                      fix_clashes: bool = True):
     """Ingest the environment + every variant, wire each site, and assemble the hybrid system.
 
     environment : path | Part | Structure -- the peptide / protein / environment.
@@ -124,6 +125,8 @@ def build_msld_system(environment, sites, *, forcefield=None, add_hydrogens: boo
                   Parts override (Part.forcefield) or extend it (Part.extra_forcefield), so a
                   non-standard residue carries its OWN ffxml on top of the standard one, and a ligand
                   variant carries a small-molecule force field.
+    fix_clashes : try other rotamers for grafted blocks that clash with the environment
+                  (see HybridSystemAssembler.assemble); bundle.reports["clashes"] lists them.
     Returns a HybridSystemBundle (bundle.to_model() -> MSLDModel; bundle.system -> plain System).
     """
     default_ff = list(forcefield) if forcefield else None
@@ -147,4 +150,5 @@ def build_msld_system(environment, sites, *, forcefield=None, add_hydrogens: boo
             aligner=site.aligner))
 
     return HybridSystemAssembler().assemble(
-        env, specs, renormalize=renormalize, solvate=solvate, solvate_kwargs=solvate_kwargs)
+        env, specs, renormalize=renormalize, solvate=solvate, solvate_kwargs=solvate_kwargs,
+        fix_clashes=fix_clashes)

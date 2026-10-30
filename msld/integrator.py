@@ -137,7 +137,8 @@ class LambdaDynamics:
     # -----------------------------------------------------------
     # minimization
     # -----------------------------------------------------------
-    def minimize(self, max_iterations=0, tolerance=10.0, relax_blocks=True):
+    def minimize(self, max_iterations=0, tolerance=10.0, relax_blocks=True,
+                 check_endpoints=True):
         """Energy-minimize the ATOMS at the current lambda, then reload the relaxed positions.
 
         Freshly grafted / freshly solvated hybrids start with steric clashes (alternate side
@@ -155,6 +156,9 @@ class LambdaDynamics:
         At partial lambda the soft-core hides a grafted side chain that sits inside the
         environment, so the minimization above leaves it there: MDM2 ILE stayed ~3e5 kJ/mol above
         the other endpoints, a wall that kept lambda_ILE at 0.
+
+        check_endpoints: finally run check_endpoints() -- warn, or raise, if a block's endpoint is
+        still far above its site-mates (a clash the relaxation could not remove).
         """
         from openmm import LocalEnergyMinimizer
         self.project()                                  # push current lambda to the Context
@@ -165,7 +169,73 @@ class LambdaDynamics:
         if relax_blocks:
             self.relax_blocks(max_iterations=max_iterations, tolerance=tolerance)
         self.invalidate_forces()
+        if check_endpoints:
+            self.check_endpoints()
         return self
+
+    def worst_contact(self, b):
+        """(distance nm, block atom, env atom) of block b's closest NON-excluded environment atom
+        (NonbondedForce exceptions -- exclusions and 1-4 pairs -- skipped), minimum image."""
+        import openmm as mm
+        if getattr(self, "_nb_exceptions", None) is None:
+            system = self.context.getSystem()
+            pairs = set()
+            for f in system.getForces():
+                if isinstance(f, mm.NonbondedForce):
+                    for k in range(f.getNumExceptions()):
+                        i, j, *_ = f.getExceptionParameters(k)
+                        pairs.add((min(i, j), max(i, j)))
+            self._nb_exceptions = pairs
+            self._env_idx = np.array([i for i, blk in enumerate(self.model.atom_block) if blk == 0])
+        box = self.context.getState().getPeriodicBoxVectors(asNumpy=True).value_in_unit(_NM)
+        periodic = self.context.getSystem().usesPeriodicBoundaryConditions()
+        inv = np.linalg.inv(box) if periodic else None
+        env = self._env_idx
+        best = (math.inf, -1, -1)
+        for a in self.model.blocks[b].atoms:
+            dr = self.x[env] - self.x[a]
+            if periodic:
+                s = dr @ inv
+                dr = (s - np.round(s)) @ box
+            d = np.linalg.norm(dr, axis=1)
+            for j in np.argsort(d)[:16]:
+                c = int(env[j])
+                if (min(a, c), max(a, c)) in self._nb_exceptions:
+                    continue
+                if d[j] < best[0]:
+                    best = (float(d[j]), a, c)
+                break
+        return best
+
+    def check_endpoints(self, warn_gap=1.0e3, max_gap=1.0e4):
+        """Compare each block's endpoint energy with the lowest endpoint of its site.
+
+        A grafted side chain left inside the environment puts its endpoint far above its site-mates
+        (MDM2 ILE: ~3e5 kJ/mol before relaxation), and lambda dynamics can never switch it on. A gap
+        above `warn_gap` kJ/mol warns, above `max_gap` raises RuntimeError -- both name the block and
+        its closest non-excluded environment contact. Legitimate gaps (different chemistry, charge
+        self-energy) are typically tens to hundreds of kJ/mol; raise the limits for unusual systems.
+        Returns {block: gap} and keeps it as self.endpoint_gaps."""
+        import warnings
+        e = self.endpoint_energies()
+        gaps, bad = {}, []
+        for s in range(1, self.model.n_sites):
+            js = self.model.blocks_in_site(s)
+            lo = min(e[b] for b in js)
+            for b in js:
+                gaps[b] = e[b] - lo
+                if gaps[b] > warn_gap:
+                    d, a, c = self.worst_contact(b)
+                    bad.append((gaps[b], f"site {s} block {b}: endpoint {gaps[b]:.0f} kJ/mol above the "
+                                         f"lowest of its site; closest non-excluded env contact "
+                                         f"atom {a}-{c} at {d:.3f} nm"))
+        self.endpoint_gaps = gaps
+        if bad:
+            msg = "; ".join(m for _, m in bad)
+            if max(g for g, _ in bad) > max_gap:
+                raise RuntimeError("endpoint check failed (clash not removed by minimize): " + msg)
+            warnings.warn("large endpoint gap(s): " + msg, stacklevel=2)
+        return gaps
 
     def endpoint_lambdas(self, b):
         """Current lambdas with block b's site switched to b alone (other sites unchanged)."""

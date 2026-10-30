@@ -30,19 +30,20 @@ SORT severity ASC, id ASC
 | [[ISS-009 NPT impossible with the Python driver\|ISS-009]] | NPT impossible with the Python driver | open | medium | gap | confirmed | [[TASK-049 Interim NPT in the Python driver\|TASK-049]], [[TASK-061 Plugin S3 fused integrator\|TASK-061]] |
 | [[ISS-010 Finite-difference dU-dlambda noisy in single precision\|ISS-010]] | Finite-difference dU/dlambda noisy in single precision | investigating | medium | design-flaw | inferred | [[TASK-041 Analytic bias derivatives\|TASK-041]], [[TASK-059 Plugin S1 Reference nonbonded force\|TASK-059]] |
 | [[ISS-011 ALF is a heuristic and ddG is single-leg\|ISS-011]] | ALF is a heuristic and ddG is single-leg | open | medium | design-flaw | source | [[TASK-046 Implement or adopt standard ALF\|TASK-046]], [[TASK-047 Two-leg ddG estimator\|TASK-047]] |
-| [[ISS-013 Soft-core off while BLaDE examples use it\|ISS-013]] | Soft-core off while BLaDE examples use it | fixed | medium | divergence | source | [[TASK-050 Soft-core design spike\|TASK-050]] |
 | [[ISS-014 Bonded scaling defaults differ from BLaDE\|ISS-014]] | Bonded scaling defaults differ from BLaDE | open | medium | divergence | source | [[TASK-057 BLaDE-style bonded scaling switches\|TASK-057]] |
 | [[ISS-017 Zero-mass particles break the integrator\|ISS-017]] | Zero-mass particles break the integrator | open | medium | bug | inferred | [[TASK-039 Handle zero-mass particles in the integrator\|TASK-039]] |
 | [[ISS-021 Preparation layer never audited\|ISS-021]] | Preparation layer never audited | open | medium | risk | confirmed | [[TASK-040 Audit the preparation layer\|TASK-040]] |
 | [[ISS-022 Ingest does not validate geometry\|ISS-022]] | Ingest does not validate geometry | open | medium | gap | confirmed | [[TASK-055 Validate input geometry\|TASK-055]] |
-| [[ISS-008 PME alpha recomputed from the tolerance\|ISS-008]] | PME alpha recomputed from the tolerance | open | low | bug | confirmed | [[TASK-037 Read PME alpha from the force\|TASK-037]] |
 | [[ISS-015 Cross-site 1-4 and CMAP are refused\|ISS-015]] | Cross-site 1-4 and CMAP are refused | open | low | gap | source | [[TASK-052 Cross-site 1-4 scaling\|TASK-052]], [[TASK-053 CMAP scaling spike\|TASK-053]] |
 | [[ISS-016 Theta biases and charge restraints missing\|ISS-016]] | Theta biases and charge restraints missing | open | low | gap | source | [[TASK-051 Implement theta biases\|TASK-051]], [[TASK-054 Charge-changing perturbations\|TASK-054]] |
 | [[ISS-019 Fixed-block lambda semantics differ from BLaDE\|ISS-019]] | Fixed-block lambda semantics differ from BLaDE | open | low | divergence | source | [[TASK-056 Fixed-block semantics like BLaDE\|TASK-056]] |
 | [[ISS-023 Restrained-atom bonded scaling rule missing\|ISS-023]] | Restrained-atom bonded scaling rule missing | open | low | divergence | source | [[TASK-057 BLaDE-style bonded scaling switches\|TASK-057]] |
 | [[ISS-024 Core-only bonded terms take reference parameters\|ISS-024]] | Core-only bonded terms take reference parameters | open | low | risk | inferred | [[TASK-040 Audit the preparation layer\|TASK-040]] |
 | [[ISS-025 NBFIX recovery assumes the OpenMM table convention\|ISS-025]] | NBFIX recovery assumes the OpenMM table convention | open | low | risk | source | [[TASK-040 Audit the preparation layer\|TASK-040]] |
+| [[ISS-027 Solvated hybrids get wrong variant bonded parameters\|ISS-027]] | Solvated hybrids get wrong variant bonded parameters | fixed | critical | bug | confirmed | — |
+| [[ISS-028 Grafted blocks clash with the environment\|ISS-028]] | Grafted blocks clash with the environment | fixed | high | bug | confirmed | — |
+| [[ISS-013 Soft-core off while BLaDE examples use it\|ISS-013]] | Soft-core off while BLaDE examples use it | fixed | medium | divergence | source | [[TASK-050 Soft-core design spike\|TASK-050]] |
 | [[ISS-026 Constrained atoms run below the bath temperature\|ISS-026]] | Constrained atoms run below the bath temperature | fixed | medium | bug | confirmed | [[ADR-0044 Own SHAKE in the Python driver\|ADR-0044]] |
-| [[ISS-027 Solvated hybrids get wrong variant bonded parameters\|ISS-027]] | Solvated hybrids get wrong variant bonded parameters | fixed | critical | bug | confirmed | |
+| [[ISS-008 PME alpha recomputed from the tolerance\|ISS-008]] | PME alpha recomputed from the tolerance | fixed | low | bug | confirmed | [[TASK-037 Read PME alpha from the force\|TASK-037]] |
 <!-- END GENERATED -->
 

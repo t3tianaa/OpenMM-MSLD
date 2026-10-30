@@ -31,6 +31,7 @@ Run: `for t in tests/test_*.py; do python "$t"; done` in the `msld` env. Mostly 
 | `test_integrator` | θ-force = FD; stable dynamics; T_θ sanity | [[REQ-016 Canonical sampling of atoms and theta\|REQ-016]], [[REQ-002 Lambda from theta with implicit constraints\|REQ-002]] |
 | `test_analytic_dudl` | Tier-0 hybrid dU/dλ = full FD; group split; biases not dropped | [[REQ-020 Accurate dU-dlambda for every term\|REQ-020]] |
 | `test_minimize` | minimize relaxes a clash; identical exclusion sets | [[REQ-026 Energy minimization at fixed lambda\|REQ-026]], [[REQ-021 Runs on Reference, CPU, OpenCL, CUDA\|REQ-021]] |
+| `test_clash` | grafted-block clash check, rotamer relief, endpoint-gap check | [[REQ-026 Energy minimization at fixed lambda\|REQ-026]] |
 | `test_io` | CSV + DCD reporters, populations, trajectory PDB CONECT | [[REQ-027 Trajectory, lambda and energy output\|REQ-027]] |
 | `test_alf` | heuristic ALF P1–P3 on toys | [[REQ-030 Adaptive landscape flattening\|REQ-030]] |
 
