@@ -280,6 +280,22 @@ def _existing_exception_pairs(nbf: mm.NonbondedForce) -> set:
     return pairs
 
 
+def _ewald_alpha(nbf: mm.NonbondedForce) -> float:
+    """Ewald splitting parameter alpha (1/nm) the NonbondedForce will actually use.
+
+    A user-set alpha (setPMEParameters, PME/LJPME only) wins; otherwise OpenMM derives it from
+    the tolerance as (1/rc) * sqrt(-ln(2*tol)). Any real-space correction must use this same
+    alpha, or partial-lambda energies are off (lambda = 1 stays exact). See ISS-008.
+    """
+    NB = mm.NonbondedForce
+    if nbf.getNonbondedMethod() in (NB.PME, NB.LJPME):
+        alpha = nbf.getPMEParameters()[0].value_in_unit(_NM**-1)
+        if alpha > 0.0:
+            return alpha
+    rc = nbf.getCutoffDistance().value_in_unit(_NM)
+    return math.sqrt(-math.log(2.0 * nbf.getEwaldErrorTolerance())) / rc
+
+
 def _same_site_pairs(model) -> set:
     """All (a, c) atom pairs (a<c) whose atoms are in DIFFERENT blocks of the SAME site."""
     pairs = set()
@@ -347,8 +363,7 @@ def add_within_block_elec_correction(system: mm.System, model) -> list:
         screen, cn_method, cutoff = "1/r", CN.NoCutoff, None
     elif method in (NB.PME, NB.Ewald, NB.LJPME, NB.CutoffPeriodic):
         rc = nbf.getCutoffDistance().value_in_unit(_NM)
-        # OpenMM's default Ewald alpha:  (1/rc) * sqrt(-ln(2*tol))
-        alpha = math.sqrt(-math.log(2.0 * nbf.getEwaldErrorTolerance())) / rc
+        alpha = _ewald_alpha(nbf)
         screen, cn_method, cutoff = f"erfc({alpha}*r)/r", CN.CutoffPeriodic, rc
     else:  # CutoffNonPeriodic
         rc = nbf.getCutoffDistance().value_in_unit(_NM)
@@ -571,7 +586,7 @@ def _direct_space_screen(nbf: mm.NonbondedForce):
         return "1/{x}", CN.NoCutoff, None
     rc = nbf.getCutoffDistance().value_in_unit(_NM)
     if method in (NB.PME, NB.Ewald, NB.LJPME):
-        alpha = math.sqrt(-math.log(2.0 * nbf.getEwaldErrorTolerance())) / rc
+        alpha = _ewald_alpha(nbf)
         return f"erfc({alpha}*{{x}})/{{x}}", CN.CutoffPeriodic, rc
     # reaction field (CutoffPeriodic / CutoffNonPeriodic); its constant shift cancels in a difference
     eps = nbf.getReactionFieldDielectric()

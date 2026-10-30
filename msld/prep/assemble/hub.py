@@ -64,6 +64,29 @@ class HybridSystemBundle:
         return paths
 
 
+def endpoint_net_charge(structure, site_mappings) -> float:
+    """Net charge of the hybrid's REFERENCE endpoint: every non-block atom + the first block
+    (the reference variant) of each site. Summing all atoms instead counts each site's charge
+    once per variant, which picks the wrong number of counter-ions whenever the blocks carry
+    net charge. Warns if a site's variants differ in net charge (endpoints not iso-charge)."""
+    import warnings
+    q = [a.charge for a in structure.atoms]
+    in_block = set()
+    total = 0.0
+    for m in site_mappings:
+        nets = {name: sum(q[i] for i in atoms) for name, atoms in m.blocks.items()}
+        for atoms in m.blocks.values():
+            in_block.update(atoms)
+        if nets:
+            total += next(iter(nets.values()))
+            if max(nets.values()) - min(nets.values()) > 0.5:
+                warnings.warn(
+                    "site variants differ in net charge (" +
+                    ", ".join(f"{k}={v:+.2f}" for k, v in nets.items()) +
+                    "); neutralizing the reference endpoint only", stacklevel=2)
+    return total + sum(qi for i, qi in enumerate(q) if i not in in_block)
+
+
 class HybridSystemAssembler:
     """Run structure -> charges -> (solvate) -> system, and return a HybridSystemBundle."""
 
@@ -105,7 +128,9 @@ class HybridSystemAssembler:
         # the site mappings stay valid; only the total atom count grows.
         if solvate:
             from .solvate import solvate as _solvate
-            sres = _solvate(structure, **(solvate_kwargs or {}))
+            kw = dict(solvate_kwargs or {})
+            kw.setdefault("net_charge", endpoint_net_charge(structure, hres.site_mappings))
+            sres = _solvate(structure, **kw)
             structure = sres.structure
             reports["solvate"] = sres
 

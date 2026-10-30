@@ -22,7 +22,7 @@ self-energy λ², within-block reciprocal λ²), matching BLaDE's `nbrecip` conv
 
 ## Acceptance criteria
 - [x] AC1 — λ = 1 reproduces base PME energy and forces.
-- [ ] AC2 — α read from the force, not re-derived from the tolerance ([[ISS-008 PME alpha recomputed from the tolerance|ISS-008]]).
+- [x] AC2 — α read from the force, not re-derived from the tolerance ([[ISS-008 PME alpha recomputed from the tolerance|ISS-008]]).
 - [ ] AC3 — partial-λ PME energy and dU/dλ match BLaDE ([[REQ-070 Agree with BLaDE on a shared CHARMM system|REQ-070]]).
 - [ ] AC4 — analytic dU/dλ for PME ([[REQ-020 Accurate dU-dlambda for every term|REQ-020]]).
 

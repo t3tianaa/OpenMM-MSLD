@@ -5,6 +5,7 @@ we assert the scaled energy == factor*E1, with factor the
 product of the block lambdas. Plus: same-site exclusion, 
 and PME recovers-base.
 """
+import math
 import os
 import sys
 
@@ -141,6 +142,55 @@ def test_elec_pme_recovers_base():
     scale_msld_system(system, m)
     e_one, _ = _energy_and_derivs(system, pos, [1.0] * m.n_blocks)
     assert abs(e_one - e_base) < 1e-4 * max(1.0, abs(e_base)), (e_one, e_base)
+
+
+_PME_Q = [0.6, 0.5, -0.4, 0.3, -0.5, -0.5]
+_PME_POS = [Vec3(0.3, 0.3, 0.3), Vec3(0.9, 0.4, 0.3), Vec3(1.3, 0.5, 0.4),
+            Vec3(1.0, 0.8, 0.9), Vec3(1.8, 1.6, 1.2), Vec3(0.5, 1.9, 2.1)] * unit.nanometer
+
+
+def _pme_system(charges, alpha, exclusions=()):
+    system = mm.System()
+    L = 2.5
+    system.setDefaultPeriodicBoxVectors(Vec3(L, 0, 0) * unit.nanometer,
+                                        Vec3(0, L, 0) * unit.nanometer,
+                                        Vec3(0, 0, L) * unit.nanometer)
+    nbf = mm.NonbondedForce()
+    nbf.setNonbondedMethod(mm.NonbondedForce.PME)
+    nbf.setCutoffDistance(1.0 * unit.nanometer)
+    nbf.setPMEParameters(alpha, 48, 48, 48)
+    for q in charges:
+        system.addParticle(12.0)
+        nbf.addParticle(q, 0.3, 0.0)
+    for a, c in exclusions:
+        nbf.addException(a, c, 0.0, 0.3, 0.0)
+    system.addForce(nbf)
+    return system
+
+
+def test_user_set_pme_alpha_used_by_within_block_correction():
+    # ISS-008: the within-block correction (lambda - lambda^2) * KE*q1*q2*erfc(alpha r)/r must use
+    # the alpha the NonbondedForce uses, also when the user set it with setPMEParameters.
+    # Reference: a plain NonbondedForce with the charges already scaled (lambda*q) and the
+    # same-site pairs excluded, plus that correction written out by hand.
+    alpha, lam1 = 2.6, 0.3
+    lam = [1.0, lam1, 1.0 - lam1]
+    m = MSLDModel(6)
+    m.softcore_alpha = 0.0           # this file checks the plain linear-lambda formulas
+    m.add_block(site=1, atoms=[1, 2])     # within-block pair (1,2) at 0.41 nm, not excluded
+    m.add_block(site=1, atoms=[3])
+    m.finalize()
+    system = _pme_system(_PME_Q, alpha)
+    scale_msld_system(system, m)
+    e_msld, _ = _energy_and_derivs(system, _PME_POS, lam)
+
+    scaled = [q * lam[m.atom_block[i]] for i, q in enumerate(_PME_Q)]
+    plain = _pme_system(scaled, alpha, exclusions=[(1, 3), (2, 3)])
+    e_plain, _ = _energy_and_derivs(plain, _PME_POS)
+    r = (_PME_POS[2] - _PME_POS[1]).value_in_unit(unit.nanometer)
+    r = math.sqrt(r[0] ** 2 + r[1] ** 2 + r[2] ** 2)
+    corr = (lam1 - lam1 ** 2) * 138.935456 * _PME_Q[1] * _PME_Q[2] * math.erfc(alpha * r) / r
+    assert abs(e_msld - (e_plain + corr)) < 1e-6, (e_msld, e_plain + corr)
 
 
 if __name__ == "__main__":

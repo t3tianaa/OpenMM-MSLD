@@ -207,6 +207,29 @@ def test_solvated_build_keeps_variant_bonded_parameters():
         assert x == y, (kind, [(p, q) for p, q in zip(x, y) if p != q][:3])
 
 
+def test_solvated_hybrid_neutralizes_reference_endpoint():
+    """Regression: solvate summed the charges of EVERY atom, i.e. every variant's block at once,
+    so each site's charge was counted once per variant. ALA4 -> GLU (charge-changing, so no
+    renormalization): the WT endpoint is -1 and gets exactly one Na+ (the all-atom sum, ~-1.9,
+    used to give two), and the assembler warns that the endpoints differ in net charge."""
+    st, _, _ = _fixture()
+    glu = _extract(st, [a.idx for a in list(st.residues)[4].atoms])
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        bundle = build_msld_system(environment=st,
+                                   sites=[Site(residue=3, variants={"GLU": glu}, mapper="backbone")],
+                                   renormalize=False, solvate=True,
+                                   solvate_kwargs=dict(padding=0.6, ion_conc=0.0))
+    assert any("differ in net charge" in str(w.message) for w in caught)
+    sres = bundle.reports["solvate"]
+    assert (sres.n_pos_ions, sres.n_neg_ions) == (1, 0), (sres.n_pos_ions, sres.n_neg_ions)
+    blocks = bundle.mapping.sites[0].blocks
+    q = [a.charge for a in bundle.structure.atoms]
+    in_block = set().union(*blocks.values())
+    wt_net = sum(qi for i, qi in enumerate(q) if i not in in_block) + sum(q[i] for i in blocks["WT"])
+    assert abs(wt_net) < 1e-6, wt_net             # WT endpoint (+ the ion) is neutral
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

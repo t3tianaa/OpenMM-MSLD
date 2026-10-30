@@ -134,7 +134,8 @@ def _strip_residues(struct, residues):
 def solvate(solute, *, padding: float = 1.0, water_model: str = "tip3p",
             water_ff=("amber14/tip3p.xml",), ion_conc: float = 0.0,
             clash: float = 0.20, positive_ion: str = "Na+",
-            negative_ion: str = "Cl-", neutralize: bool = True) -> SolvateResult:
+            negative_ion: str = "Cl-", neutralize: bool = True,
+            net_charge: float | None = None) -> SolvateResult:
     """Solvate a dry solute Structure in a cubic water box with neutralizing ions.
 
     padding   : min distance (nm) from the solute to each box wall.
@@ -146,6 +147,9 @@ def solvate(solute, *, padding: float = 1.0, water_model: str = "tip3p",
     ion_conc  : background salt concentration (molar); 0 = only neutralizing ions.
     clash     : delete a water if any of its atoms is within this distance (nm) of a
                 solute atom.
+    net_charge: the solute's physical net charge, used to choose the neutralizing ions. None
+                sums every atom, which is right only for a plain solute: a hybrid carries every
+                variant's block at once, so the assembler passes the charge of one endpoint.
     Returns a SolvateResult whose .structure has a periodic box set.
     """
     if solute.coordinates is None:
@@ -180,8 +184,9 @@ def solvate(solute, *, padding: float = 1.0, water_model: str = "tip3p",
     # 3. neutralize: convert the waters farthest from the solute into counter-ions
     n_pos_added = n_neg_added = 0
     if neutralize:
-        q_total = round(sum(a.charge for a in solute.atoms)
-                        + sum(a.charge for a in solv.atoms))
+        q_solute = (sum(a.charge for a in solute.atoms) if net_charge is None
+                    else float(net_charge))
+        q_total = round(q_solute + sum(a.charge for a in solv.atoms))
         if q_total != 0:
             pos_tpl, neg_tpl = _ion_templates(ff, water_model, positive_ion, negative_ion)
             template = neg_tpl if q_total > 0 else pos_tpl
