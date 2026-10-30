@@ -115,7 +115,45 @@ def test_scaled_forces_share_one_exclusion_set():
           f"({len(nb_forces)} forces, {len(ref)} exclusions each)")
 
 
+def _endpoint_block_forces(dyn, ctx, model):
+    """max |F| on each block's own atoms, at that block's endpoint, at the driver's positions."""
+    from msld.builder import set_lambdas
+    ctx.setPositions(dyn.x * _NM)
+    out = {}
+    for b in range(1, model.n_blocks):
+        set_lambdas(ctx, dyn.endpoint_lambdas(b))
+        f = ctx.getState(getForces=True).getForces(asNumpy=True).value_in_unit(_KJ / _NM)
+        out[b] = float(np.linalg.norm(np.asarray(f)[model.blocks[b].atoms], axis=1).max())
+    dyn.project()
+    return out
+
+
+def test_relax_blocks_minimizes_each_endpoint():
+    # At theta = 0 both blocks are at lambda = 0.5, where soft-core softens what each block
+    # feels; the mixed-lambda minimum is then not a minimum of either endpoint (on MDM2 the ILE
+    # side chain stayed inside MET38, ~3e5 kJ/mol above the other endpoints). relax_blocks moves
+    # each block alone at its own endpoint, with the environment frozen.
+    system, pos, model = _clash_system()
+    scale_msld_system(system, model)
+    ctx = mm.Context(system, mm.VerletIntegrator(0.001), _REF)
+    ctx.setPositions(pos)
+    dyn = LambdaDynamics(ctx, model, temperature=300.0, timestep=0.001)
+
+    dyn.minimize(max_iterations=2000, tolerance=1.0, relax_blocks=False)
+    x_mixed = dyn.x.copy()
+    before = _endpoint_block_forces(dyn, ctx, model)
+    assert max(before.values()) > 100.0, before        # mixed minimum is not an endpoint minimum
+
+    dyn.relax_blocks(max_iterations=2000, tolerance=1.0)
+    after = _endpoint_block_forces(dyn, ctx, model)
+    assert max(after.values()) < 5.0, after
+    env = [i for i in range(model.n_atoms) if model.atom_block[i] == 0]
+    assert np.allclose(dyn.x[env], x_mixed[env])          # the shared environment did not move
+    print("PASS test_relax_blocks_minimizes_each_endpoint", before, "->", after)
+
+
 if __name__ == "__main__":
     test_minimize_relaxes_a_clash()
     test_scaled_forces_share_one_exclusion_set()
+    test_relax_blocks_minimizes_each_endpoint()
     print("\nminimize + exclusion-parity tests passed")

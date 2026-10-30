@@ -71,7 +71,8 @@ bundle.save(str(OUT))
 
 # A freshly built/solvated hybrid has steric clashes -> MUST minimize or dynamics blows up step 1.
 print(f"PE before minimize: {dyn.potential_energy():.1f} kJ/mol")
-dyn.minimize(max_iterations=5000)
+dyn.minimize(max_iterations=5000)   # then relaxes each variant at its own endpoint (relax_blocks)
+print("endpoint energies:", {k: round(v, 1) for k, v in dyn.endpoint_energies().items()})
 print(f"PE after  minimize: {dyn.potential_energy():.1f} kJ/mol")
 
 dyn.run(10000,

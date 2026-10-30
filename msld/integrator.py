@@ -137,7 +137,7 @@ class LambdaDynamics:
     # -----------------------------------------------------------
     # minimization
     # -----------------------------------------------------------
-    def minimize(self, max_iterations=0, tolerance=10.0):
+    def minimize(self, max_iterations=0, tolerance=10.0, relax_blocks=True):
         """Energy-minimize the ATOMS at the current lambda, then reload the relaxed positions.
 
         Freshly grafted / freshly solvated hybrids start with steric clashes (alternate side
@@ -150,6 +150,11 @@ class LambdaDynamics:
         block exclusions); minimizing the unscaled System would let the mutually-exclusive variant
         side chains -- which deliberately overlap in space -- clash. `tolerance` is kJ/mol/nm;
         `max_iterations=0` runs to convergence. Returns self.
+
+        relax_blocks: afterwards, relax each block ALONE at its own endpoint (relax_blocks()).
+        At partial lambda the soft-core hides a grafted side chain that sits inside the
+        environment, so the minimization above leaves it there: MDM2 ILE stayed ~3e5 kJ/mol above
+        the other endpoints, a wall that kept lambda_ILE at 0.
         """
         from openmm import LocalEnergyMinimizer
         self.project()                                  # push current lambda to the Context
@@ -157,6 +162,74 @@ class LambdaDynamics:
         LocalEnergyMinimizer.minimize(self.context, tolerance * _F_UNIT, max_iterations)
         self.x = np.array(self.context.getState(getPositions=True)
                           .getPositions(asNumpy=True).value_in_unit(_NM))
+        if relax_blocks:
+            self.relax_blocks(max_iterations=max_iterations, tolerance=tolerance)
+        self.invalidate_forces()
+        return self
+
+    def endpoint_lambdas(self, b):
+        """Current lambdas with block b's site switched to b alone (other sites unchanged)."""
+        lam = list(self.get_lambdas())
+        site = self.model.blocks[b].site
+        for c in self.model.blocks_in_site(site):
+            lam[c] = 1.0 if c == b else 0.0
+        return lam
+
+    def endpoint_energies(self):
+        """{block: potential energy (kJ/mol) at endpoint_lambdas(block)} at the current positions.
+        A block far above its site-mates usually means its atoms clash with the environment."""
+        self.context.setPositions(self.x * _NM)
+        out = {}
+        for b in range(1, self.model.n_blocks):
+            set_lambdas(self.context, self.endpoint_lambdas(b))
+            out[b] = (self.context.getState(getEnergy=True).getPotentialEnergy()
+                      .value_in_unit(_KJ))
+        self.project()
+        return out
+
+    def relax_blocks(self, max_iterations=0, tolerance=10.0):
+        """Minimize each block's atoms alone, at that block's endpoint, everything else frozen.
+
+        Every block moves on the surface it will feel when it is the one switched on, without
+        moving the shared environment (which all blocks must agree on). Frozen = zero mass on a
+        copy of the System (the minimizer leaves massless particles in place); constraints that
+        touch a frozen atom are dropped from the copy, and the result is re-constrained.
+        Returns self.
+        """
+        import openmm as mm
+        system = self.context.getSystem()
+        xml = mm.XmlSerializer.serialize(system)
+        platform = self.context.getPlatform()
+        x = self.x.copy()
+        for b in range(1, self.model.n_blocks):
+            atoms = list(self.model.blocks[b].atoms)
+            if not atoms:
+                continue
+            mov = set(atoms)
+            sysb = mm.XmlSerializer.deserialize(xml)
+            for i in range(sysb.getNumParticles()):
+                if i not in mov:
+                    sysb.setParticleMass(i, 0.0)
+            for k in reversed(range(sysb.getNumConstraints())):
+                i, j, _ = sysb.getConstraintParameters(k)
+                if i not in mov or j not in mov:
+                    sysb.removeConstraint(k)
+            ctx = mm.Context(sysb, mm.VerletIntegrator(0.001), platform)
+            ctx.setPeriodicBoxVectors(*self.context.getState().getPeriodicBoxVectors())
+            ctx.setPositions(x * _NM)
+            for name, value in self.context.getParameters().items():
+                ctx.setParameter(name, value)          # biases etc.
+            set_lambdas(ctx, self.endpoint_lambdas(b))
+            mm.LocalEnergyMinimizer.minimize(ctx, tolerance * _F_UNIT, max_iterations)
+            new = ctx.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(_NM)
+            x[atoms] = new[atoms]
+            del ctx
+        self.context.setPositions(x * _NM)
+        if self.has_constraints:
+            self.context.applyConstraints(self.constraint_tol)
+        self.x = np.array(self.context.getState(getPositions=True)
+                          .getPositions(asNumpy=True).value_in_unit(_NM))
+        self.project()
         self.invalidate_forces()
         return self
 
