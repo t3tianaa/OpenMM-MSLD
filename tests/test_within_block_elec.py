@@ -51,6 +51,7 @@ def _chain_block_system(method, box=None):
            Vec3(0.60, 0.30, 0.30), Vec3(0.75, 0.30, 0.30), Vec3(0.90, 0.30, 0.30),
            Vec3(0.30, 0.90, 0.30)] * unit.nanometer
     m = MSLDModel(7)
+    m.softcore_alpha = 0.0       # linearity of the plain scaling; soft-core: test_softcore.py
     m.add_block(site=1, atoms=[1, 2, 3, 4, 5])
     m.add_block(site=1, atoms=[6])
     m.finalize()
