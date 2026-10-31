@@ -91,9 +91,23 @@ def test_within_block_pme_correction_is_exact_erfc():
     assert ratio > 0.25 + 1e-4, ratio
 
 
+def test_within_block_reaction_field_is_linear():
+    # reaction field (CutoffNonPeriodic and CutoffPeriodic): the within-block pair must scale
+    # linearly with its full RF kernel 1/r + k_rf r^2 - c_rf (formerly the correction used bare
+    # 1/r for CutoffNonPeriodic and the PME erfc screen for CutoffPeriodic).
+    for method, box in [(mm.NonbondedForce.CutoffNonPeriodic, None), (mm.NonbondedForce.CutoffPeriodic, 2.5)]:
+        system, pos, m = _chain_block_system(method, box=box)
+        scale_msld_system(system, m)
+        e1 = _energy(system, pos, [1, 1, 1])
+        for lam in (0.5, 0.2):
+            elam = _energy(system, pos, [1, lam, 1])
+            assert abs(elam / e1 - lam) < 1e-6, (method, lam, elam / e1)
+
+
 def test_lambda_one_preserved():
     # the correction is zero at lambda=1, so lambda=1 must equal the base energy
-    for method, box in [(mm.NonbondedForce.NoCutoff, None), (mm.NonbondedForce.PME, 2.5)]:
+    for method, box in [(mm.NonbondedForce.NoCutoff, None), (mm.NonbondedForce.PME, 2.5),
+                        (mm.NonbondedForce.CutoffNonPeriodic, None), (mm.NonbondedForce.CutoffPeriodic, 2.5)]:
         system, pos, m = _chain_block_system(method, box=box)
         # base energy (no MSLD)
         base = mm.Context(system, mm.VerletIntegrator(0.001), _REF)

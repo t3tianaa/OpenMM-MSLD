@@ -357,17 +357,24 @@ def add_within_block_elec_correction(system: mm.System, model) -> list:
     excl = sorted(_existing_exception_pairs(nbf))
     method = nbf.getNonbondedMethod()
 
-    # direct-space Coulomb form + CustomNonbondedForce method
+    # direct-space Coulomb form + CustomNonbondedForce method. It must be the NonbondedForce's
+    # own pair kernel g(r): erfc screen for Ewald/PME, reaction field (with its constant shift,
+    # which does not cancel here) for CutoffPeriodic and CutoffNonPeriodic.
     NB, CN = mm.NonbondedForce, mm.CustomNonbondedForce
     if method == NB.NoCutoff:
         screen, cn_method, cutoff = "1/r", CN.NoCutoff, None
-    elif method in (NB.PME, NB.Ewald, NB.LJPME, NB.CutoffPeriodic):
+    elif method in (NB.PME, NB.Ewald, NB.LJPME):
         rc = nbf.getCutoffDistance().value_in_unit(_NM)
         alpha = _ewald_alpha(nbf)
         screen, cn_method, cutoff = f"erfc({alpha}*r)/r", CN.CutoffPeriodic, rc
-    else:  # CutoffNonPeriodic
+    else:  # reaction field: CutoffPeriodic / CutoffNonPeriodic
         rc = nbf.getCutoffDistance().value_in_unit(_NM)
-        screen, cn_method, cutoff = "1/r", CN.CutoffNonPeriodic, rc
+        eps = nbf.getReactionFieldDielectric()
+        krf = (eps - 1.0) / ((2.0 * eps + 1.0) * rc ** 3)
+        crf = 3.0 * eps / ((2.0 * eps + 1.0) * rc)
+        screen = f"(1/r+{krf!r}*r^2-{crf!r})"
+        cn_method = CN.CutoffPeriodic if method == NB.CutoffPeriodic else CN.CutoffNonPeriodic
+        cutoff = rc
 
     excl_set = set(excl)
     # Same-site cross-block pairs are excluded on the base NonbondedForce (and LJ forces) but by
