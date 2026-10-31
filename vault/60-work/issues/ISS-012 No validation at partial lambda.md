@@ -2,7 +2,7 @@
 id: ISS-012
 type: issue
 title: No validation at partial lambda
-status: open
+status: mitigated
 kind: risk
 severity: high
 confidence: confirmed
@@ -11,7 +11,7 @@ affects: ["[[Force scaling component]]", "[[Simulation subsystem]]"]
 requirements: ["[[REQ-070 Agree with BLaDE on a shared CHARMM system|REQ-070]]", "[[REQ-072 Every feature has an automated test|REQ-072]]"]
 fixed_by: ["[[TASK-067 NumPy partial-lambda oracle tests|TASK-067]]", "[[TASK-043 BLaDE fixed-lambda cross-check|TASK-043]]"]
 found: 2026-09-26
-updated: 2026-09-27
+updated: 2026-10-31
 ---
 # ISS-012 — Nothing validates partial-λ energies or θ statistics against an independent implementation
 
@@ -22,3 +22,8 @@ distributions in a real system. The C++ plugin plan would reproduce any such err
 
 Mitigation: [[FEAT-045 Independent partial-lambda oracle tests|FEAT-045]] (NumPy oracle, cheap) and [[FEAT-030 BLaDE cross-validation harness|FEAT-030]] (BLaDE cross-check).
 
+
+**Mitigated (2026-10-31).** The NumPy oracle ([[TASK-067 NumPy partial-lambda oracle tests|TASK-067]]) confirms partial-λ energies, dU/dλ and dU/dθ to
+1e-8 for NoCutoff systems (bonded, LJ and Coulomb with soft-core, within-block and cross-site pairs,
+1-4s, biases, restraints). Still open: PME/reciprocal space at partial λ, and λ distributions in a
+real system against BLaDE ([[TASK-043 BLaDE fixed-lambda cross-check|TASK-043]], plugin stage).
