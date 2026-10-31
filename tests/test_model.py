@@ -79,3 +79,19 @@ if __name__ == "__main__":
             print(f"PASS {name}")
     print("\nall model tests passed")
     print(build_toy().summary())
+
+
+def test_theta_defaults_match_blade():
+    """Default theta mass/friction = BLaDE's 5 amu*A^2 (AKMA) and 1 ps^-1, in our amu*nm^2 (ADR-0038)."""
+    from msld.model import theta_mass_from_blade
+    m = build_toy()
+    for bl in m.blocks[1:]:
+        assert abs(bl.theta_mass - 0.05) < 1e-12
+        assert abs(bl.theta_friction - 1.0) < 1e-12
+    assert abs(theta_mass_from_blade(5.0) - 0.05) < 1e-12
+    assert abs(theta_mass_from_blade(5.0, "NMPS") - 5.0) < 1e-12
+    try:
+        theta_mass_from_blade(5.0, "SI")
+        assert False, "unknown unit system must raise"
+    except ValueError:
+        pass
