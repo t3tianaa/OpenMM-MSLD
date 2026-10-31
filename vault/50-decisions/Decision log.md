@@ -51,7 +51,7 @@ estimates. ADR-0031+ are current.
 | [[ADR-0035 Gate plugin work\|ADR-0035]] | Gate plugin work behind the θ-unit check and a BLaDE cross-check | proposed |
 | [[ADR-0036 Same-site reciprocal-space convention\|ADR-0036]] | Same-site reciprocal-space convention | proposed |
 | [[ADR-0037 Whitelist force types\|ADR-0037]] | Whitelist force types; raise on anything else touching alchemical atoms | proposed |
-| [[ADR-0038 Theta units and default theta mass\|ADR-0038]] | θ units and default θ mass/friction equivalent to BLaDE | proposed |
+| [[ADR-0038 Theta units and default theta mass\|ADR-0038]] | θ units and default θ mass/friction equivalent to BLaDE | accepted |
 | [[ADR-0039 Dispersion correction handling\|ADR-0039]] | Dispersion correction handling | proposed |
 | [[ADR-0040 Supported nonbonded methods\|ADR-0040]] | Supported nonbonded methods: PME and NoCutoff only | proposed |
 | [[ADR-0041 Default bonded scaling follows BLaDE practice\|ADR-0041]] | Default bonded scaling follows BLaDE removescaling practice | proposed |

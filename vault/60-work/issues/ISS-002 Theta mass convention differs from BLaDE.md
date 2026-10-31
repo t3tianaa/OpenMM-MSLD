@@ -2,7 +2,7 @@
 id: ISS-002
 type: issue
 title: Theta mass convention differs from BLaDE
-status: investigating
+status: resolved
 kind: divergence
 severity: high
 confidence: inferred
@@ -11,7 +11,7 @@ affects: ["[[MSLD model component]]", "[[Lambda dynamics integrator component]]"
 requirements: ["[[REQ-016 Canonical sampling of atoms and theta|REQ-016]]", "[[REQ-017 Per-block theta mass, friction and fixing|REQ-017]]"]
 fixed_by: ["[[TASK-032 Resolve BLaDE theta units|TASK-032]]", "[[TASK-033 Rerun MDM2 with reference theta parameters|TASK-033]]"]
 found: 2026-09-26
-updated: 2026-09-27
+updated: 2026-10-31
 ---
 # ISS-002 — θ mass convention differs from BLaDE (audit F2, corrected)
 
@@ -30,3 +30,7 @@ depend on this.
 **Next.** [[TASK-032 Resolve BLaDE theta units|TASK-032]] (resolve units) then [[TASK-033 Rerun MDM2 with reference theta parameters|TASK-033]] (MDM2 rerun with reference-equivalent
 parameters); decision [[ADR-0038 Theta units and default theta mass|ADR-0038]].
 
+
+**Resolved (2026-10-31).** Production BLaDE is the AKMA build: m = 5 amu·Å² = 0.05 amu·nm² in our
+units, i.e. our old masses 5–40 were 100–800× too heavy, not too light. Defaults changed
+([[ADR-0038 Theta units and default theta mass|ADR-0038]]); verified on MDM2 in [[EXP-011 MDM2 theta mass and friction screen|EXP-011]].
