@@ -1,4 +1,5 @@
-"""Soft-core for overlap-prone nonbonded pairs (block<->env, block<->block across sites).
+"""Soft-core for overlap-prone nonbonded pairs (block<->env, within a block, block<->block across
+sites).
 
 Without soft-core a switched-off block (lambda ~ 0) fills with solvent and its dU/dlambda is the
 unscaled overlap energy (1e5-1e6 kJ/mol), so it can never switch back on. With soft-core:
@@ -137,6 +138,80 @@ def test_theta_force_matches_fd_with_softcore():
         dyn.theta[i] = t0; dyn.project()
         fd = (ep - em) / (2 * h)
         assert abs(g[i] - fd) < 1e-4 * max(1.0, abs(fd)), (i, g[i], fd)
+
+
+def _chain_system(overlap):
+    """env atom 0 ; site 1: block A = chain 1-2-3-4-5, block B = {6}. Pairs within 3 bonds are
+    excluded, so 1-5 is the only within-block full pair; with overlap=True atom 5 sits on atom 1
+    (a switched-off side chain folded onto itself: its torsions and 1-4s are off with it)."""
+    system = mm.System()
+    system.setDefaultPeriodicBoxVectors(Vec3(_L, 0, 0), Vec3(0, _L, 0), Vec3(0, 0, _L))
+    for _ in range(7):
+        system.addParticle(12.0)
+    nbf = mm.NonbondedForce()
+    nbf.setNonbondedMethod(mm.NonbondedForce.PME)
+    nbf.setCutoffDistance(1.0)
+    nbf.setUseDispersionCorrection(False)
+    for q in (0.2, 0.3, -0.1, 0.1, -0.1, -0.4, 0.1):
+        nbf.addParticle(q, 0.32, 0.5)
+    chain = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (0, 6)]
+    bonds = mm.HarmonicBondForce()
+    for a, c in chain:
+        bonds.addBond(a, c, 0.15, 1000.0)
+    system.addForce(bonds)
+    nbf.createExceptionsFromBonds(chain, 0.0, 0.0)      # 1-2, 1-3 and 1-4 all excluded
+    system.addForce(nbf)
+    x5 = Vec3(1.0, 1.15, 1.0005) if overlap else Vec3(1.6, 1.3, 1.0)
+    pos = [Vec3(1.0, 1.0, 1.0), Vec3(1.0, 1.15, 1.0), Vec3(1.15, 1.2, 1.0),
+           Vec3(1.3, 1.15, 1.0), Vec3(1.45, 1.2, 1.0), x5, Vec3(0.85, 1.0, 1.0)]
+    m = MSLDModel(7)
+    m.add_block(site=1, atoms=[1, 2, 3, 4, 5])
+    m.add_block(site=1, atoms=[6])
+    return system, pos * unit.nanometer, m
+
+
+def _chain_dyn(alpha, overlap, theta):
+    system, pos, model = _chain_system(overlap)
+    model.softcore_alpha = alpha
+    model.finalize()
+    scale_msld_system(system, model)
+    ctx = mm.Context(system, mm.VerletIntegrator(0.001), _REF)
+    ctx.setPositions(pos)
+    dyn = LambdaDynamics(ctx, model, temperature=300.0, fd_step=1e-2)
+    dyn.theta = list(theta)
+    return dyn
+
+
+def test_within_block_overlap_derivative_bounded():
+    """MDM2 ILE: a switched-off block folds onto itself (1-5 pair on top of each other). A plain
+    within-block LJ puts the r^-12 wall into dU/dlambda; soft-core (BLaDE) keeps it bounded."""
+    theta = [0.0, -1.5, 1.5]                       # lambda_A ~ 1.7e-5
+    d_plain, lam = _chain_dyn(0.0, True, theta).dUdlambda()
+    d_soft, _ = _chain_dyn(0.5, True, theta).dUdlambda()
+    assert lam[1] < 1e-4, lam
+    assert abs(d_plain[1]) > 1e8, d_plain[1]
+    assert abs(d_soft[1]) < 2e3, d_soft[1]
+    print(f"  folded off block: dU/dlambda plain {d_plain[1]:.3g}, soft-core {d_soft[1]:.3g}")
+
+
+def test_within_block_softcore_endpoints_and_fd():
+    # lambda = 0/1 unchanged by soft-core; at partial lambda the hybrid dU/dlambda (analytic + FD)
+    # still equals a full finite difference of the energy
+    for lam in ([1, 1, 0], [1, 0, 1]):
+        e = []
+        for alpha in (0.0, 0.5):
+            system, pos, model = _chain_system(False)
+            model.softcore_alpha = alpha
+            model.finalize()
+            scale_msld_system(system, model)
+            e.append(_energy(system, pos, lam))
+        assert abs(e[0] - e[1]) < 1e-6 * max(1.0, abs(e[0])), (lam, e)
+    for overlap in (False, True):
+        dyn = _chain_dyn(0.5, overlap, [0.0, 0.2, -0.3])
+        d, _ = dyn.dUdlambda()
+        full = _full_fd(dyn)
+        for b in dyn.dof:
+            assert abs(d[b] - full[b]) < 1e-4 * max(1.0, abs(full[b])), (overlap, b, d[b], full[b])
 
 
 if __name__ == "__main__":

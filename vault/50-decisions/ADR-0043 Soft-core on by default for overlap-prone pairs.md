@@ -34,8 +34,12 @@ Block↔env and cross-site block↔block pairs use
 - Coulomb: a correction force `MSLDSCElec_*` adding L·KE·q₁q₂[g(r_sc) − g(r)] on top of the λ-scaled
   NonbondedForce, r_sc = (r⁶ + α(1−L)σ_q⁶)^(1/6), g the force's real-space kernel (erfc for PME/Ewald,
   1/r, or reaction field).
-Within-block pairs stay plain (held by the block's bonded terms). `softcore_alpha = 0` restores
-the old linear scaling.
+~~Within-block pairs stay plain (held by the block's bonded terms).~~ **Amended 2026-10-31:**
+within-block (1-5+) pairs are soft-cored too (L = λ_b), LJ and direct-space Coulomb, as BLaDE does
+(`nbdirect.cu`: rSoft = R·(1−λ_b) for a same-block pair). A switched-off block has its torsions and
+1-4s off as well, so on MDM2 the ILE side chain folded onto itself and its plain within-block LJ put
+1e4–6e4 kJ/mol spikes into dU/dλ_ILE (off-state p99 2.8e4), which kicked θ_ILE back off.
+`softcore_alpha = 0` restores the old linear scaling.
 
 ## Consequences
 - λ = 1 (all λ ∈ {0, 1}) energies are unchanged; master invariant holds (test_softcore, test_master).

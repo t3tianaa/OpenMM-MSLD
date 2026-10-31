@@ -466,7 +466,8 @@ def add_scaled_electrostatics(system: mm.System, model) -> mm.NonbondedForce | N
 # with L the pair's lambda product. At L = 1 this is plain LJ (lambda = 1 reproduces the base
 # System); as L -> 0 it stays finite at r = 0, so a switched-off block that solvent has filled
 # has a bounded dU/dlambda instead of the r^-12 wall (1e5-1e6 kJ/mol without it). Within-block
-# pairs keep plain LJ: their geometry is held by the block's own bonded terms.
+# (1-5+) pairs are softened too, with L = lambda_b, as in BLaDE: a switched-off block has its
+# torsions and 1-4s off as well, so it can fold onto itself (MDM2 ILE: 1e4-1e5 kJ/mol spikes).
 # Still disabled (see vault EXP-005): the long-range dispersion correction.
 
 
@@ -493,10 +494,13 @@ _LJ_EXPR = ("*4*epsilon*((sigma/r)^12-(sigma/r)^6);"
 
 
 def _softcore_lj_expr(prefix: str, alpha: float) -> str:
-    """Beutler soft-core LJ scaled by L = prefix; `blk` per-particle flags same-block pairs,
-    which stay plain (soft-core term switched off by delta(blk1-blk2))."""
+    """Beutler soft-core LJ scaled by L = prefix. Applied to EVERY lambda-scaled pair, the
+    within-block (1-5+) ones included, as BLaDE does (nbdirect.cu: rSoft = R*(1 - l_i) for a
+    same-block pair): with lambda_b -> 0 the block's torsions and 1-4s are off too, so its own
+    side chain can fold onto itself, and a plain within-block LJ then puts 1e4-1e5 kJ/mol spikes
+    into dU/dlambda_b (MDM2 ILE)."""
     return (f"L*4*epsilon*(1/s^2-1/s);"
-            f"s=(r/sigma)^6+({alpha})*(1-L)*(1-delta(blk1-blk2));"
+            f"s=(r/sigma)^6+({alpha})*(1-L);"
             f"L={prefix};"
             "sigma=0.5*(sigma1+sigma2); epsilon=sqrt(epsilon1*epsilon2)")
 
@@ -538,10 +542,8 @@ def add_scaled_lj(system: mm.System, model) -> list[mm.CustomNonbondedForce]:
         _match_nonbonded_method(f, nbf)
         f.addPerParticleParameter("sigma")
         f.addPerParticleParameter("epsilon")
-        if alpha > 0.0:
-            f.addPerParticleParameter("blk")
-        for i, (s, e) in enumerate(lj):
-            f.addParticle([s, e, float(model.atom_block[i])] if alpha > 0.0 else [s, e])
+        for s, e in lj:
+            f.addParticle([s, e])
         for a, c in excl:
             f.addExclusion(a, c)
         _register_lambdas(f, sig_tuple)         # globals + analytic dU/dlambda
@@ -596,8 +598,9 @@ def _direct_space_screen(nbf: mm.NonbondedForce):
 
 
 def add_softcore_electrostatics(system: mm.System, model, charges) -> list:
-    """Soft-core the direct-space Coulomb of pairs that can overlap (block<->env, and block<->block
-    across sites), as a correction on top of the lambda-scaled NonbondedForce:
+    """Soft-core the direct-space Coulomb of pairs that can overlap (block<->env, within a block
+    (1-5+), and block<->block across sites), as a correction on top of the lambda-scaled
+    NonbondedForce (+ within-block correction, which together give L*g(r) within a block):
 
         dU = L*KE*q1*q2*[g(r_sc) - g(r)],   r_sc = (r^6 + alpha*(1-L)*sigma_q^6)^(1/6)
 
@@ -641,11 +644,19 @@ def add_softcore_electrostatics(system: mm.System, model, charges) -> list:
     env_charged = any(charges[a] != 0.0 for a in env_atoms)
     created = []
     for b in alch:
-        if env_atoms and env_charged and charged[b]:
-            f = _make((b,))
+        if not charged[b]:
+            continue
+        with_env = bool(env_atoms) and env_charged
+        within = len(block_atoms[b]) >= 2
+        if not (with_env or within):
+            continue
+        f = _make((b,))
+        if with_env:
             f.addInteractionGroup(env_atoms, block_atoms[b])
-            system.addForce(f)
-            created.append(f)
+        if within:
+            f.addInteractionGroup(block_atoms[b], block_atoms[b])
+        system.addForce(f)
+        created.append(f)
     for x in range(len(alch)):
         for y in range(x + 1, len(alch)):
             b, c = alch[x], alch[y]
@@ -694,10 +705,9 @@ def _is_parmed_ab_table(per_params, tabs) -> bool:
 def _softcore_ab_expr(prefix: str, alpha: float) -> str:
     """Beutler soft-core in ParmEd's acoef/bcoef form, the tabulated analogue of
     _softcore_lj_expr: 4 eps = b^2/a^2 and sigma^6 = a^2/b per PAIR, so NBFIX pairs soften with
-    their own sigma. Same-block pairs (delta(blk1-blk2) = 1) stay plain: L*(a^2/r^12 - b/r^6).
-    A pair with b = 0 (zero-LJ types) keeps the plain form, which is then 0 or pure repulsion."""
+    their own sigma. Within-block pairs are softened too, as in _softcore_lj_expr. A pair with b = 0 (zero-LJ types) keeps the plain form, which is then 0 or pure repulsion."""
     return (f"L*select(bb, (bb*bb/a2)*(1/(s*s)-1/s), a2/(r6*r6)-bb/r6);"
-            f"s=r6*bb/a2+({alpha})*(1-L)*(1-delta(blk1-blk2));"
+            f"s=r6*bb/a2+({alpha})*(1-L);"
             f"a2=aa*aa+1e-30; r6=r^6;"
             f"aa=acoef(type1, type2); bb=bcoef(type1, type2);"
             f"L={prefix}")
@@ -757,14 +767,12 @@ def add_scaled_charmm_lj(system: mm.System, model) -> list[mm.CustomNonbondedFor
             g.setName(name)
             for pn in per_params:
                 g.addPerParticleParameter(pn)
-            if softcore:
-                g.addPerParticleParameter("blk")
             for gn, dv in gparams:
                 g.addGlobalParameter(gn, dv)
             for tname, tfn in tabs:
                 g.addTabulatedFunction(tname, _copy_tabulated(tfn))
-            for i, pv in enumerate(pvals):
-                g.addParticle(pv + [float(model.atom_block[i])] if softcore else pv)
+            for pv in pvals:
+                g.addParticle(pv)
             for a, c in excls:
                 g.addExclusion(a, c)
             g.setNonbondedMethod(method)
@@ -777,8 +785,7 @@ def add_scaled_charmm_lj(system: mm.System, model) -> list[mm.CustomNonbondedFor
             _register_lambdas(g, sig_tuple)
             return g
 
-        # single-lambda: env<->block b and within block b (soft-core only between blocks of
-        # different blk, i.e. env<->block; within-block pairs stay plain, as in add_scaled_lj)
+        # single-lambda: env<->block b and within block b (both soft-cored, as in add_scaled_lj)
         for b in alch:
             g = _make((b,), "MSLDCharmmLJ_%d" % b)
             if env_atoms and block_atoms[b]:
