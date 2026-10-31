@@ -52,13 +52,9 @@ model.scale_angle = False
 model.scale_system(bundle.system)
 print("blocks at the site:", bundle.mapping.sites[0].block_names)
 
-# theta-parameter choice: the earlier "theta runs hot (1400-2400 K)" was a transient during the
-# initial lambda collapse, driven by the 1e5-1e6 kJ/mol dU/dlambda of switched-off variants that
-# solvent had filled (no soft-core then), not by the finite-difference force (AUD-003). Soft-core is
-# now on by default (ADR-0043); these theta params are unchanged pending a rerun.
-for bl in model.blocks[1:]:
-    bl.theta_mass = 10.0
-    bl.theta_friction = 20.0
+# theta parameters: the Block defaults (mass 0.05 amu*nm^2, friction 1 ps^-1) are BLaDE's 5 amu*A^2
+# and 1 ps^-1 (ADR-0038). On MDM2 they thermalize theta and give the most variant switching; the old
+# 10 / 20 gave D = kT/(m*gamma) ~ 0.0125 rad^2/ps and no switching at all (EXP-006).
 
 # OpenCL is ~380x faster than Reference for this ~26k-atom solvated system, and the CPU platform
 # now works too (all nonbonded forces share one exclusion set). Reference is far too slow here.

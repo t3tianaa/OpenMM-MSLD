@@ -24,6 +24,19 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import math
 
+# theta units (ADR-0038). theta is in radians and energies in kJ/mol, so the theta mass carries
+# amu*nm^2. BLaDE (AKMA build, the one CHARMM and ALF use) takes its theta mass in amu*A^2:
+# its default 5 equals 0.05 here. The NMPS build already uses nm, so its mass maps 1:1.
+_BLADE_TO_NM2 = {"AKMA": 0.01, "NMPS": 1.0}
+
+
+def theta_mass_from_blade(m: float, units: str = "AKMA") -> float:
+    """Convert a BLaDE theta mass to ours (amu*nm^2). units: 'AKMA' (CHARMM/ALF, A^2) or 'NMPS'."""
+    try:
+        return float(m) * _BLADE_TO_NM2[units.upper()]
+    except KeyError:
+        raise ValueError(f"unknown BLaDE unit system {units!r} (AKMA or NMPS)") from None
+
 
 @dataclass
 class Block:
@@ -33,8 +46,8 @@ class Block:
     atoms: list[int] = field(default_factory=list)
     theta0: float = 0.0              # initial theta
     theta_velocity0: float = 0.0
-    theta_mass: float = 5.0          # amu (usually 5)
-    theta_friction: float = 1.0      # ps^-1 (per-block Langevin friction)
+    theta_mass: float = 0.05         # amu*nm^2 (theta in rad); = BLaDE's 5 amu*A^2 (AKMA build)
+    theta_friction: float = 1.0      # ps^-1 (per-block Langevin friction), as BLaDE
     lambda_bias: float = 0.0         # fixed linear bias coefficient on lambda
     fixed: bool = False              # freeze THETA. lambda is fixed only if every block of the
                                      # site is fixed (the softmax renormalizes over the site)
