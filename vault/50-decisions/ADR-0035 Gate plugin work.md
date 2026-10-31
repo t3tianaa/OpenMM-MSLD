@@ -25,3 +25,8 @@ thermalizes with reference-equivalent parameters, and (b) the first BLaDE fixed-
 - Months of C++ work are spent on a validated target.
 - The plugin's motivation list may shrink to performance + NPT + analytic PME.
 
+
+## Status of the gate (2026-10-31)
+(a) θ units settled — [[ADR-0038 Theta units and default theta mass|ADR-0038]] accepted, θ thermalizes on MDM2 ([[EXP-011 MDM2 theta mass and friction screen|EXP-011]]). (b) The NumPy oracle
+passes at partial λ ([[TASK-067 NumPy partial-lambda oracle tests|TASK-067]]). Both conditions are met; the BLaDE cross-check moves to the
+plugin stage (Tetiana, 2026-10-31). Plugin S1 must reproduce `tests/data/oracle_toy.json`.
