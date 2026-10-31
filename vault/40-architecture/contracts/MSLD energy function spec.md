@@ -1,7 +1,7 @@
 ---
 title: MSLD energy function spec
 type: contract
-status: frozen
+status: as-built
 layer: L2
 requirements: ["[[REQ-020 Accurate dU-dlambda for every term|REQ-020]]", "[[REQ-011 Soft-core for alchemical nonbonded|REQ-011]]", "[[REQ-016 Canonical sampling of atoms and theta|REQ-016]]"]
 decisions: ["[[ADR-0043 Soft-core on by default for overlap-prone pairs|ADR-0043]]", "[[ADR-0038 Theta units and default theta mass|ADR-0038]]", "[[ADR-0035 Gate plugin work|ADR-0035]]"]

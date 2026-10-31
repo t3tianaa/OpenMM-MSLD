@@ -1,7 +1,7 @@
 ---
 title: ALF package overview
 type: reference
-status: partial
+status: draft
 system: alf
 version: not pinned
 related: ["[[REQ-030 Adaptive landscape flattening]]", "[[ALF flattening component]]"]

@@ -2,7 +2,7 @@
 id: ISS-012
 type: issue
 title: No validation at partial lambda
-status: mitigated
+status: open
 kind: risk
 severity: high
 confidence: confirmed

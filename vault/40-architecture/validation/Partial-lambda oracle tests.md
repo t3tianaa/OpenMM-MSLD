@@ -1,7 +1,7 @@
 ---
 title: Partial-lambda oracle tests
 type: component
-status: implemented
+status: as-built
 layer: L2
 requirements: ["[[REQ-072 Every feature has an automated test|REQ-072]]", "[[REQ-070 Agree with BLaDE on a shared CHARMM system|REQ-070]]"]
 updated: 2026-10-31
