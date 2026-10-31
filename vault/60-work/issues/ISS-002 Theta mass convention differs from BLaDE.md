@@ -2,7 +2,7 @@
 id: ISS-002
 type: issue
 title: Theta mass convention differs from BLaDE
-status: resolved
+status: fixed
 kind: divergence
 severity: high
 confidence: inferred

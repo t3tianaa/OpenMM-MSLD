@@ -2,7 +2,7 @@
 id: ISS-018
 type: issue
 title: Theta runs hot in MDM2
-status: resolved
+status: fixed
 kind: bug
 severity: high
 confidence: confirmed

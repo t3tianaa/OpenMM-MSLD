@@ -22,14 +22,12 @@ SORT priority ASC, id ASC
 |---|---|---|---|---|
 | [[TASK-029 Build the project knowledge vault\|TASK-029]] | Build the project knowledge vault | P0 | M4 | [[FEAT-044 Knowledge vault and process\|FEAT-044]] |
 
-### todo (48)
+### todo (45)
 
 | task | title | priority | milestone | feature |
 |---|---|---|---|---|
 | [[TASK-030 Commit and push the local state to a branch\|TASK-030]] | Commit and push the local state to a branch | P0 | M4 | [[FEAT-044 Knowledge vault and process\|FEAT-044]] |
 | [[TASK-031 Rebuild atom restraint groups\|TASK-031]] | Rebuild atom restraint groups | P0 | M4 | [[FEAT-007 Atom restraints\|FEAT-007]] |
-| [[TASK-032 Resolve BLaDE theta units\|TASK-032]] | Resolve BLaDE theta units | P0 | M4 | [[FEAT-008 Lambda-dynamics integrator\|FEAT-008]] |
-| [[TASK-033 Rerun MDM2 with reference theta parameters\|TASK-033]] | Rerun MDM2 with reference theta parameters | P0 | M4 | [[FEAT-022 MDM2 test system\|FEAT-022]] |
 | [[TASK-034 Add same-site exclusions to CHARMM LJ copies\|TASK-034]] | Add same-site exclusions to CHARMM LJ copies | P1 | M4 | [[FEAT-047 Engine hardening\|FEAT-047]] |
 | [[TASK-035 Whitelist force types\|TASK-035]] | Whitelist force types | P1 | M4 | [[FEAT-047 Engine hardening\|FEAT-047]] |
 | [[TASK-036 Preserve env-env dispersion correction\|TASK-036]] | Preserve env-env dispersion correction | P1 | M4 | [[FEAT-047 Engine hardening\|FEAT-047]] |
@@ -39,7 +37,6 @@ SORT priority ASC, id ASC
 | [[TASK-043 BLaDE fixed-lambda cross-check\|TASK-043]] | BLaDE fixed-lambda cross-check | P1 | M5 | [[FEAT-030 BLaDE cross-validation harness\|FEAT-030]] |
 | [[TASK-044 Decide the same-site PME convention\|TASK-044]] | Decide the same-site PME convention | P1 | M5 | [[FEAT-003 Electrostatics scaling\|FEAT-003]] |
 | [[TASK-045 Import BLaDE MSLD setups\|TASK-045]] | Import BLaDE MSLD setups | P1 | M5 | [[FEAT-030 BLaDE cross-validation harness\|FEAT-030]] |
-| [[TASK-067 NumPy partial-lambda oracle tests\|TASK-067]] | NumPy partial-lambda oracle tests | P1 | M4 | [[FEAT-045 Independent partial-lambda oracle tests\|FEAT-045]] |
 | [[TASK-070 CHARMM force switching for the cross-check\|TASK-070]] | CHARMM force switching for the cross-check | P1 | M5 | [[FEAT-030 BLaDE cross-validation harness\|FEAT-030]] |
 | [[TASK-072 Point agents to the vault via CLAUDE.md\|TASK-072]] | Point agents to the vault via CLAUDE.md | P1 | M4 | [[FEAT-044 Knowledge vault and process\|FEAT-044]] |
 | [[TASK-078 Fixed-lambda replica-exchange cross-check\|TASK-078]] | Fixed-lambda replica-exchange cross-check | P1 | M5 | [[FEAT-041 Amber validation vs FEP or TI\|FEAT-041]] |
@@ -75,7 +72,7 @@ SORT priority ASC, id ASC
 | [[TASK-076 Pin literature citations\|TASK-076]] | Pin literature citations | P3 | M4 | [[FEAT-044 Knowledge vault and process\|FEAT-044]] |
 | [[TASK-077 Mine earlier sessions for decision history\|TASK-077]] | Mine earlier sessions for decision history | P3 | M4 | [[FEAT-044 Knowledge vault and process\|FEAT-044]] |
 
-### done (30)
+### done (33)
 
 | task | title | priority | milestone | feature |
 |---|---|---|---|---|
@@ -107,6 +104,9 @@ SORT priority ASC, id ASC
 | [[TASK-026 Tier 0 analytic dU-dlambda\|TASK-026]] | Tier 0 analytic dU/dlambda | P1 | M2 | [[FEAT-009 Tier-0 analytic dU-dlambda\|FEAT-009]] |
 | [[TASK-027 Scope the C++ plugin\|TASK-027]] | Scope the C++ plugin | P2 | M7 | [[FEAT-033 Analytic nonbonded plugin force\|FEAT-033]] |
 | [[TASK-028 Audit the local working copy\|TASK-028]] | Audit the local working copy | P0 | M4 | [[FEAT-047 Engine hardening\|FEAT-047]] |
+| [[TASK-032 Resolve BLaDE theta units\|TASK-032]] | Resolve BLaDE theta units | P0 | M4 | [[FEAT-008 Lambda-dynamics integrator\|FEAT-008]] |
+| [[TASK-033 Rerun MDM2 with reference theta parameters\|TASK-033]] | Rerun MDM2 with reference theta parameters | P0 | M4 | [[FEAT-022 MDM2 test system\|FEAT-022]] |
+| [[TASK-067 NumPy partial-lambda oracle tests\|TASK-067]] | NumPy partial-lambda oracle tests | P1 | M4 | [[FEAT-045 Independent partial-lambda oracle tests\|FEAT-045]] |
 | [[TASK-073 Retire the legacy documents\|TASK-073]] | Retire the legacy documents | P2 | M4 | [[FEAT-044 Knowledge vault and process\|FEAT-044]] |
 | [[TASK-079 Update the Mac env to OpenMM 8.6.1\|TASK-079]] | Update the Mac env to OpenMM 8.6.1 | P1 | M4 | [[FEAT-047 Engine hardening\|FEAT-047]] |
 <!-- END GENERATED -->
