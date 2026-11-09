@@ -37,7 +37,7 @@ scope stands, and bonded terms stay stock OpenMM custom forces.
   Independent checks (Ewald sum, BLaDE) stay required.
 
 ## Consequences
-- Work order: S2 GPU and S3 `MSLDIntegrator` in C++; P1 Python layer (model, forces, ALF, io); P2 prep; P3 command
+- Work order: S2 GPU and S3 `MSLDIntegrator` (as built, a `CustomIntegrator`: no new C++ was needed); P1 Python layer (model, forces, ALF, io); P2 prep; P3 command
   line ([[Production plugin architecture]]). The order of S2 and S3 relative to P1–P3 is not fixed by this ADR.
 - `use_plugin` (`msld/plugin.py`) is a bridge for comparing the two during the port, not the final design.
 - New engine features should go to openmm-ld once their module is ported, so the two do not diverge.

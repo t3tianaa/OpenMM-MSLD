@@ -28,12 +28,13 @@ One package, [t3tianaa/openmm-ld](https://github.com/t3tianaa/openmm-ld); this r
 implementation during the port, then retires.
 ```
  openmm-ld/
-   openmmapi/             MSLDNonbondedForce (exists); MSLDIntegrator (S3)
+   openmmapi/             MSLDNonbondedForce (exists)
    platforms/reference/   double precision, also serves the CPU platform (exists)
    platforms/common/      one kernel source -> OpenCL + CUDA + HIP (S2)
    serialization/         XML proxies (exists)
    python/                SWIG module (exists)
-   openmm_ld/             Python layer: model, forces (bonded, bias, restraints), alf, io, prep, cli (P1-P3)
+   openmm_ld/             Python layer: integrator (a CustomIntegrator, S3), model, forces, dynamics, alf, io (P1);
+                          prep (P2), cli (P3)
 ```
 Bonded terms stay stock custom forces (already analytic).
 
@@ -41,11 +42,11 @@ Bonded terms stay stock custom forces (already analytic).
 | stage | deliverable | acceptance | as built (2026-11-09) |
 |---|---|---|---|
 | S0 | skeleton builds and loads | trivial force = hand calculation | done on Reference + CPU; OpenCL moved to S2 |
-| S1 | MSLDNonbondedForce, Reference, soft-core included | λ = 1 invariant; reproduces `tests/data/oracle_toy.json` ([[MSLD energy function spec]]); partial-λ PME energies = Python engine; analytic dU/dλ = Python hybrid; independent Ewald sum and BLaDE single points | done except BLaDE ([[TASK-043 BLaDE fixed-lambda cross-check\|TASK-043]]) |
-| S2 | same force on common/GPU | = S1 within fp32 tolerance; last FD gone | not started |
-| S3 | MSLDIntegrator | T_θ = 300 K; barostat fires; energy conserved at γ = 0; θ/vθ/biases survive `context.setState()`; has `getTemperature()`; runs under `ReplicaExchangeSampler` ([[ADR-0042 OpenMM multistate samplers for fixed-lambda cross-checks\|ADR-0042]]) | not started |
+| S1 | MSLDNonbondedForce, Reference, soft-core included | λ = 1 invariant; reproduces `tests/data/oracle_toy.json` ([[MSLD energy function spec]]); partial-λ PME energies = Python engine; analytic dU/dλ = Python hybrid; independent Ewald sum ([[EXP-013 Plugin PME against a plain Ewald sum\|EXP-013]]) and BLaDE single points | done except BLaDE ([[TASK-043 BLaDE fixed-lambda cross-check\|TASK-043]]) |
+| S2 | same force on common/GPU | = S1 within fp32 tolerance | not started |
+| S3 | MSLDIntegrator, as an OpenMM `CustomIntegrator` in `openmm_ld/integrator.py`: no new C++ was needed | T_θ = 300 K; barostat fires; energy conserved at γ = 0; θ/vθ/biases survive `context.setState()`; has `getTemperature()`; runs under `ReplicaExchangeSampler` ([[ADR-0042 OpenMM multistate samplers for fixed-lambda cross-checks\|ADR-0042]]) | done on the toy, 2026-11-09 (`docs/msld_integrator.md` in openmm-ld); pressure and exchange statistics not checked |
 | S4 | ~~soft-core~~ folded into S1 (the energy function already includes it) | — | — |
-| P1 | Python layer: λ model, bonded/bias/restraint setup, ALF, output | same forces and same ALF updates as this repository on the same inputs | not started |
+| P1 | Python layer: λ model, bonded/bias/restraint setup, ALF, output | same forces and same ALF updates as this repository on the same inputs | done, 2026-11-09 (`docs/python_layer.md` in openmm-ld); MDM2 runs end to end from a prepared system, briefly |
 | P2 | prep ported (`msld/prep/`) | same hybrid System as this repository from the same inputs | not started |
 | P3 | command line: PDB to running system | MDM2 runs from one command without this repository | not started |
 
