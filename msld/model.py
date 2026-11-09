@@ -90,6 +90,8 @@ class MSLDModel:
         # alpha = 0 restores plain linear lambda scaling.
         self.softcore_alpha = 0.5
         self.softcore_sigma_q = 0.3
+        # compute all nonbonded terms with the C++ plugin's MSLDNonbondedForce (msld/plugin.py)
+        self.use_plugin = False
         self._finalized = False
 
     def add_block(self, site: int, atoms, **kw) -> int:
@@ -200,7 +202,7 @@ class MSLDModel:
                 lam[b] = wb / z
         return lam
 
-    def scale_system(self, system, check_unhandled: bool = True) -> dict:
+    def scale_system(self, system, check_unhandled: bool = True, use_plugin: bool | None = None) -> dict:
         """Apply MSLD block-scaling to `system` in place; return the info dict.
 
         The method form of the engine entry point (see builder.scale_msld_system). The model
@@ -208,7 +210,7 @@ class MSLDModel:
         OpenMM/forces.
         """
         from .builder import scale_msld_system
-        return scale_msld_system(system, self, check_unhandled=check_unhandled)
+        return scale_msld_system(system, self, check_unhandled=check_unhandled, use_plugin=use_plugin)
 
     @property
     def n_blocks(self) -> int:
