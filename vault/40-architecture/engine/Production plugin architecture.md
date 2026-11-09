@@ -43,12 +43,13 @@ Bonded terms stay stock custom forces (already analytic).
 |---|---|---|---|
 | S0 | skeleton builds and loads | trivial force = hand calculation | done on Reference + CPU; OpenCL moved to S2 |
 | S1 | MSLDNonbondedForce, Reference, soft-core included | λ = 1 invariant; reproduces `tests/data/oracle_toy.json` ([[MSLD energy function spec]]); partial-λ PME energies = Python engine; analytic dU/dλ = Python hybrid; independent Ewald sum ([[EXP-013 Plugin PME against a plain Ewald sum\|EXP-013]]) and BLaDE single points | done except BLaDE ([[TASK-043 BLaDE fixed-lambda cross-check\|TASK-043]]) |
+| S1b | threads on the CPU platform, reused neighbour list | results independent of the thread count to round-off | done, 2026-11-09 (`docs/cpu_threading.md` in openmm-ld): MDM2 0.40 to 0.11 s/step at 4 threads |
 | S2 | same force on common/GPU | = S1 within fp32 tolerance | not started |
 | S3 | MSLDIntegrator, as an OpenMM `CustomIntegrator` in `openmm_ld/integrator.py`: no new C++ was needed | T_θ = 300 K; barostat fires; energy conserved at γ = 0; θ/vθ/biases survive `context.setState()`; has `getTemperature()`; runs under `ReplicaExchangeSampler` ([[ADR-0042 OpenMM multistate samplers for fixed-lambda cross-checks\|ADR-0042]]) | done on the toy, 2026-11-09 (`docs/msld_integrator.md` in openmm-ld); pressure and exchange statistics not checked |
 | S4 | ~~soft-core~~ folded into S1 (the energy function already includes it) | — | — |
 | P1 | Python layer: λ model, bonded/bias/restraint setup, ALF, output | same forces and same ALF updates as this repository on the same inputs | done, 2026-11-09 (`docs/python_layer.md` in openmm-ld); MDM2 runs end to end from a prepared system, briefly |
 | P2 | prep ported (`msld/prep/`) | same hybrid System as this repository from the same inputs | done, 2026-11-09 (`docs/prep.md` in openmm-ld): System XML, positions and saved files identical with `random.seed` set |
-| P3 | command line: PDB to running system | MDM2 runs from one command without this repository | done, 2026-11-09 (`docs/cli.md` in openmm-ld): `openmm-ld prepare\|alf\|run\|all`, outputs identical to the example scripts on a short run |
+| P3 | command line: PDB to running system | MDM2 runs from one command without this repository | done, 2026-11-09 (`docs/cli.md` in openmm-ld): `openmm-ld prepare\|alf\|run\|all`, outputs identical to the example scripts on a short run; on branch `p3-cli` |
 
 Original estimate for S0–S4: 4–7 months part-time. Technology choices: [[ADR-0027 Plugin technology choices|ADR-0027]].
 While the port runs, `use_plugin` (`msld/plugin.py`) lets this engine run on the plugin's force for comparison.
