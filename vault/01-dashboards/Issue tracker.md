@@ -39,6 +39,7 @@ SORT severity ASC, id ASC
 | [[ISS-023 Restrained-atom bonded scaling rule missing\|ISS-023]] | Restrained-atom bonded scaling rule missing | open | low | divergence | source | [[TASK-057 BLaDE-style bonded scaling switches\|TASK-057]] |
 | [[ISS-024 Core-only bonded terms take reference parameters\|ISS-024]] | Core-only bonded terms take reference parameters | open | low | risk | inferred | [[TASK-040 Audit the preparation layer\|TASK-040]] |
 | [[ISS-025 NBFIX recovery assumes the OpenMM table convention\|ISS-025]] | NBFIX recovery assumes the OpenMM table convention | open | low | risk | source | [[TASK-040 Audit the preparation layer\|TASK-040]] |
+| [[ISS-030 Prep is not reproducible without a seed\|ISS-030]] | Prep is not reproducible without a seed | open | low | risk | confirmed | — |
 | [[ISS-027 Solvated hybrids get wrong variant bonded parameters\|ISS-027]] | Solvated hybrids get wrong variant bonded parameters | fixed | critical | bug | confirmed | — |
 | [[ISS-002 Theta mass convention differs from BLaDE\|ISS-002]] | Theta mass convention differs from BLaDE | fixed | high | divergence | inferred | [[TASK-032 Resolve BLaDE theta units\|TASK-032]], [[TASK-033 Rerun MDM2 with reference theta parameters\|TASK-033]] |
 | [[ISS-018 Theta runs hot in MDM2\|ISS-018]] | Theta runs hot in MDM2 | fixed | high | bug | confirmed | [[TASK-032 Resolve BLaDE theta units\|TASK-032]], [[TASK-033 Rerun MDM2 with reference theta parameters\|TASK-033]] |

@@ -47,7 +47,7 @@ Bonded terms stay stock custom forces (already analytic).
 | S3 | MSLDIntegrator, as an OpenMM `CustomIntegrator` in `openmm_ld/integrator.py`: no new C++ was needed | T_θ = 300 K; barostat fires; energy conserved at γ = 0; θ/vθ/biases survive `context.setState()`; has `getTemperature()`; runs under `ReplicaExchangeSampler` ([[ADR-0042 OpenMM multistate samplers for fixed-lambda cross-checks\|ADR-0042]]) | done on the toy, 2026-11-09 (`docs/msld_integrator.md` in openmm-ld); pressure and exchange statistics not checked |
 | S4 | ~~soft-core~~ folded into S1 (the energy function already includes it) | — | — |
 | P1 | Python layer: λ model, bonded/bias/restraint setup, ALF, output | same forces and same ALF updates as this repository on the same inputs | done, 2026-11-09 (`docs/python_layer.md` in openmm-ld); MDM2 runs end to end from a prepared system, briefly |
-| P2 | prep ported (`msld/prep/`) | same hybrid System as this repository from the same inputs | not started |
+| P2 | prep ported (`msld/prep/`) | same hybrid System as this repository from the same inputs | done, 2026-11-09 (`docs/prep.md` in openmm-ld): System XML, positions and saved files identical with `random.seed` set |
 | P3 | command line: PDB to running system | MDM2 runs from one command without this repository | not started |
 
 Original estimate for S0–S4: 4–7 months part-time. Technology choices: [[ADR-0027 Plugin technology choices|ADR-0027]].
