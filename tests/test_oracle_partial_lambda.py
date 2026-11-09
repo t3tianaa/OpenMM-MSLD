@@ -102,7 +102,7 @@ def _positions(rng, overlap=False):
     return x
 
 
-def _build(seed=0, alpha=0.5, overlap=False):
+def _build(seed=0, alpha=0.5, overlap=False, use_plugin=False):
     rng = np.random.default_rng(seed)
     bonds, angles, torsions, atom_block, site, excl, p14 = _topology()
     q = rng.uniform(-0.5, 0.5, N)
@@ -163,7 +163,7 @@ def _build(seed=0, alpha=0.5, overlap=False):
         model.add_atom_restraint(atoms)
     model.k_restraint = restraints[0][1]
     model.finalize()
-    scale_msld_system(system, model)
+    scale_msld_system(system, model, use_plugin=use_plugin)
     ctx = mm.Context(system, mm.VerletIntegrator(0.001), _REF)
     ctx.setPositions(x * unit.nanometer)
     return Oracle(spec), model, ctx

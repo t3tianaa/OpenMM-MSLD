@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import openmm as mm
 
-from . import forces
+from . import forces, plugin
 from .forces import lambda_name
 
 # dU/dlambda is a hybrid: analytic where OpenMM can expose it, finite difference where it
@@ -19,6 +19,7 @@ from .forces import lambda_name
 #                          addEnergyParameterDerivative (bonded, LJ, soft-core and within-block
 #                          elec corrections, biases). Their derivative comes back for free from
 #                          getState.
+#                          The plugin's MSLDNonbondedForce (use_plugin) goes here too.
 #   group 0 (the default): everything else that depends on lambda -- the base
 #                          NonbondedForce (charge-scaling electrostatics, which OpenMM cannot
 #                          expose; exactly quadratic in each lambda), and ANY force a caller
@@ -37,7 +38,7 @@ def _split_force_groups(system: mm.System) -> None:
     for i in range(system.getNumForces()):
         f = system.getForce(i)
         getn = getattr(f, "getNumEnergyParameterDerivatives", None)
-        if getn is not None and getn() > 0:
+        if plugin.is_plugin_force(f) or (getn is not None and getn() > 0):
             f.setForceGroup(ANALYTIC_FORCE_GROUP)
         else:
             f.setForceGroup(FD_FORCE_GROUP)
@@ -105,11 +106,15 @@ def _check_unhandled(system: mm.System, model) -> None:
                         "alchemical CMAP torsion")
 
 
-def scale_msld_system(system: mm.System, model, check_unhandled: bool = True) -> dict:
+def scale_msld_system(system: mm.System, model, check_unhandled: bool = True,
+                      use_plugin: bool | None = None) -> dict:
     """Apply MSLD block-scaling to `system` in place.
 
     Returns an info dict describing what was scaled. Raises (unless
     check_unhandled=False) if unsupported force types carry alchemical atoms.
+
+    use_plugin=True (default: `model.use_plugin`, off) computes all nonbonded terms with the C++
+    plugin's MSLDNonbondedForce instead of stock OpenMM forces; see msld/plugin.py.
     """
     if not getattr(model, "_finalized", False):
         raise RuntimeError("call model.finalize() before scale_msld_system()")
@@ -129,24 +134,36 @@ def scale_msld_system(system: mm.System, model, check_unhandled: bool = True) ->
     info["scaled_improper_forces"] = (
         [f.getName() for f in forces.add_scaled_impropers(system, model)]
         if getattr(model, "scale_torsion", True) else [])
-    # within-block electrostatics correction (lambda, not lambda^2) — reads RAW charges,
-    # so it must run BEFORE add_scaled_electrostatics zeroes them
-    info["within_block_elec_corrections"] = [
-        f.getName() for f in forces.add_within_block_elec_correction(system, model)]
-    # raw charges, read before add_scaled_electrostatics moves them into lambda offsets
-    nbfs = [f for f in system.getForces() if isinstance(f, mm.NonbondedForce)]
-    raw_q = ([nbfs[0].getParticleParameters(i)[0].value_in_unit(forces._E)
-              for i in range(system.getNumParticles())] if nbfs else [])
-    nbf = forces.add_scaled_electrostatics(system, model)
-    info["scaled_electrostatics"] = (nbf is not None)
-    info["scaled_lj_forces"] = [f.getName() for f in forces.add_scaled_lj(system, model)]
-    # soft-core direct-space Coulomb for overlap-prone pairs (no-op if model.softcore_alpha == 0)
-    info["softcore_elec_forces"] = [
-        f.getName() for f in forces.add_softcore_electrostatics(system, model, raw_q)]
-    # CHARMM tabulated LJ (NBFIX -> CustomNonbondedForce); no-op on Amber
-    info["scaled_charmm_lj_forces"] = [
-        f.getName() for f in forces.add_scaled_charmm_lj(system, model)]
-    info["scaled_14_exceptions"] = forces.add_scaled_14_exceptions(system, model)
+    if use_plugin is None:
+        use_plugin = getattr(model, "use_plugin", False)
+    if use_plugin:
+        force, scaled = plugin.replace_nonbonded_with_plugin(system, model)
+        info["plugin_nonbonded_force"] = force.getName()
+        info["within_block_elec_corrections"] = []
+        info["scaled_electrostatics"] = True
+        info["scaled_lj_forces"] = []
+        info["softcore_elec_forces"] = []
+        info["scaled_charmm_lj_forces"] = []
+        info["scaled_14_exceptions"] = scaled
+    else:
+        # within-block electrostatics correction (lambda, not lambda^2) — reads RAW charges,
+        # so it must run BEFORE add_scaled_electrostatics zeroes them
+        info["within_block_elec_corrections"] = [
+            f.getName() for f in forces.add_within_block_elec_correction(system, model)]
+        # raw charges, read before add_scaled_electrostatics moves them into lambda offsets
+        nbfs = [f for f in system.getForces() if isinstance(f, mm.NonbondedForce)]
+        raw_q = ([nbfs[0].getParticleParameters(i)[0].value_in_unit(forces._E)
+                  for i in range(system.getNumParticles())] if nbfs else [])
+        nbf = forces.add_scaled_electrostatics(system, model)
+        info["scaled_electrostatics"] = (nbf is not None)
+        info["scaled_lj_forces"] = [f.getName() for f in forces.add_scaled_lj(system, model)]
+        # soft-core direct-space Coulomb for overlap-prone pairs (no-op if model.softcore_alpha == 0)
+        info["softcore_elec_forces"] = [
+            f.getName() for f in forces.add_softcore_electrostatics(system, model, raw_q)]
+        # CHARMM tabulated LJ (NBFIX -> CustomNonbondedForce); no-op on Amber
+        info["scaled_charmm_lj_forces"] = [
+            f.getName() for f in forces.add_scaled_charmm_lj(system, model)]
+        info["scaled_14_exceptions"] = forces.add_scaled_14_exceptions(system, model)
     bias = forces.add_biases(system, model)
     info["bias_force"] = bias.getName() if bias is not None else None
     restr = forces.add_atom_restraints(system, model)

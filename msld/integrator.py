@@ -38,6 +38,7 @@ from openmm import unit
 
 from .builder import set_lambdas, FD_FORCE_GROUP
 from .forces import lambda_name
+from .plugin import exception_pairs, is_plugin_force
 
 _NM = unit.nanometer
 _KJ = unit.kilojoule_per_mole
@@ -108,6 +109,17 @@ class LambdaDynamics:
         self._fd_group = FD_FORCE_GROUP
         self._has_fd = any(system.getForce(i).getForceGroup() == FD_FORCE_GROUP
                            for i in range(system.getNumForces()))
+        # With the plugin's force (use_plugin) nothing built by scale_msld_system needs the FD: what
+        # stays in group 0 does not depend on lambda, unless a caller injected a force that does.
+        self._uses_plugin = any(is_plugin_force(system.getForce(i))
+                                for i in range(system.getNumForces()))
+        if self._uses_plugin:
+            lambdas = {lambda_name(b) for b in range(1, model.n_blocks)}
+            self._has_fd = any(
+                f.getForceGroup() == FD_FORCE_GROUP
+                and any(f.getGlobalParameterName(g) in lambdas
+                        for g in range(getattr(f, "getNumGlobalParameters", lambda: 0)()))
+                for f in system.getForces())
 
         self._F = None
         self.project()
@@ -185,6 +197,8 @@ class LambdaDynamics:
                     for k in range(f.getNumExceptions()):
                         i, j, *_ = f.getExceptionParameters(k)
                         pairs.add((min(i, j), max(i, j)))
+            if self._uses_plugin:
+                pairs |= exception_pairs(system)
             self._nb_exceptions = pairs
             self._env_idx = np.array([i for i, blk in enumerate(self.model.atom_block) if blk == 0])
         box = self.context.getState().getPeriodicBoxVectors(asNumpy=True).value_in_unit(_NM)
