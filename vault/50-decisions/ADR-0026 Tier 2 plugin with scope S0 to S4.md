@@ -21,6 +21,7 @@ One plugin with `MSLDNonbondedForce` (λ-scaled LJ + PME, analytic dU/dλ_b, sof
 Reference, S2 GPU, S3 integrator, S4 soft-core ([[Production plugin architecture]]).
 
 ## Consequences
-- 4–7 months part-time (estimate). Bonded terms, prep and model stay in Python.
+- 4–7 months part-time (estimate). Bonded terms, prep and model stay in Python. (Where that Python lives is
+  changed by [[ADR-0046 openmm-ld becomes the standalone MSLD package|ADR-0046]].)
 - Start is gated by [[ADR-0035 Gate plugin work|ADR-0035]] (proposed).
 

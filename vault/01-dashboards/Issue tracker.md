@@ -32,6 +32,7 @@ SORT severity ASC, id ASC
 | [[ISS-017 Zero-mass particles break the integrator\|ISS-017]] | Zero-mass particles break the integrator | open | medium | bug | inferred | [[TASK-039 Handle zero-mass particles in the integrator\|TASK-039]] |
 | [[ISS-021 Preparation layer never audited\|ISS-021]] | Preparation layer never audited | open | medium | risk | confirmed | [[TASK-040 Audit the preparation layer\|TASK-040]] |
 | [[ISS-022 Ingest does not validate geometry\|ISS-022]] | Ingest does not validate geometry | open | medium | gap | confirmed | [[TASK-055 Validate input geometry\|TASK-055]] |
+| [[ISS-029 Partial-lambda PME energy depends on alpha\|ISS-029]] | Partial-lambda PME energy depends on alpha | open | medium | risk | confirmed | — |
 | [[ISS-015 Cross-site 1-4 and CMAP are refused\|ISS-015]] | Cross-site 1-4 and CMAP are refused | open | low | gap | source | [[TASK-052 Cross-site 1-4 scaling\|TASK-052]], [[TASK-053 CMAP scaling spike\|TASK-053]] |
 | [[ISS-016 Theta biases and charge restraints missing\|ISS-016]] | Theta biases and charge restraints missing | open | low | gap | source | [[TASK-051 Implement theta biases\|TASK-051]], [[TASK-054 Charge-changing perturbations\|TASK-054]] |
 | [[ISS-019 Fixed-block lambda semantics differ from BLaDE\|ISS-019]] | Fixed-block lambda semantics differ from BLaDE | open | low | divergence | source | [[TASK-056 Fixed-block semantics like BLaDE\|TASK-056]] |

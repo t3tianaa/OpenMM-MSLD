@@ -3,13 +3,13 @@ title: Production plugin architecture
 type: component
 subsystem: "[[Simulation subsystem]]"
 layer: L2
-status: planned
+status: partial
 code: []
 requirements: ["[[REQ-011 Soft-core for alchemical nonbonded|REQ-011]]", "[[REQ-019 NPT ensemble|REQ-019]]", "[[REQ-020 Accurate dU-dlambda for every term|REQ-020]]", "[[REQ-029 Production performance on GPU|REQ-029]]"]
-decisions: ["[[ADR-0026 Tier 2 plugin with scope S0 to S4|ADR-0026]]", "[[ADR-0027 Plugin technology choices|ADR-0027]]", "[[ADR-0035 Gate plugin work|ADR-0035]]", "[[ADR-0042 OpenMM multistate samplers for fixed-lambda cross-checks|ADR-0042]]"]
-updated: 2026-10-31
+decisions: ["[[ADR-0026 Tier 2 plugin with scope S0 to S4|ADR-0026]]", "[[ADR-0027 Plugin technology choices|ADR-0027]]", "[[ADR-0035 Gate plugin work|ADR-0035]]", "[[ADR-0042 OpenMM multistate samplers for fixed-lambda cross-checks|ADR-0042]]", "[[ADR-0046 openmm-ld becomes the standalone MSLD package|ADR-0046]]"]
+updated: 2026-11-09
 ---
-# Production plugin architecture (Tier 2, planned)
+# Production plugin architecture (Tier 2, in progress)
 
 From `PLUGIN_PLAN.md` (2026-09-23), now tracked here.
 
@@ -23,27 +23,34 @@ From `PLUGIN_PLAN.md` (2026-09-23), now tracked here.
 | soft-core as extra custom forces (exists in Python since ADR-0043) | radial shift in the same kernel |
 | speed | all of the above on GPU |
 
-## Layout (from the example plugin template, [[OpenMM plugin architecture]])
+## Layout ([[ADR-0046 openmm-ld becomes the standalone MSLD package|ADR-0046]]; plugin part from the template, [[OpenMM plugin architecture]])
+One package, [t3tianaa/openmm-ld](https://github.com/t3tianaa/openmm-ld); this repository is the reference
+implementation during the port, then retires.
 ```
- openmm-msld/
-   openmmapi/   MSLDNonbondedForce (λ-scaled LJ + PME elec + soft-core + analytic dU/dλ_b)
-                MSLDIntegrator (fused θ + atom Langevin, a real Integrator)
-   platforms/reference/   written FIRST, double precision — the oracle
-   platforms/common/      one kernel source → OpenCL + CUDA + HIP
-   serialization/  python/ (SWIG)  tests/ (Reference-vs-GPU parity)
+ openmm-ld/
+   openmmapi/             MSLDNonbondedForce (exists); MSLDIntegrator (S3)
+   platforms/reference/   double precision, also serves the CPU platform (exists)
+   platforms/common/      one kernel source -> OpenCL + CUDA + HIP (S2)
+   serialization/         XML proxies (exists)
+   python/                SWIG module (exists)
+   openmm_ld/             Python layer: model, forces (bonded, bias, restraints), alf, io, prep, cli (P1-P3)
 ```
-Bonded terms stay as stock custom forces (already analytic); prep and `MSLDModel` stay in Python.
+Bonded terms stay stock custom forces (already analytic).
 
 ## Stages ([[FEAT-033 Analytic nonbonded plugin force|FEAT-033]], [[FEAT-034 Fused MSLD integrator plugin|FEAT-034]], [[FEAT-031 Soft-core|FEAT-031]])
-| stage | deliverable | acceptance |
-|---|---|---|
-| S0 | skeleton builds, loads on Reference + OpenCL | trivial force = hand calculation |
-| S1 | MSLDNonbondedForce, Reference, soft-core included | λ = 1 invariant; reproduces `tests/data/oracle_toy.json` ([[MSLD energy function spec]]); partial-λ PME energies = Python engine; analytic dU/dλ = Python hybrid |
-| S2 | same force on common/GPU | = S1 within fp32 tolerance; last FD gone |
-| S3 | MSLDIntegrator | T_θ = 300 K; barostat fires; energy conserved at γ = 0; θ/vθ/biases survive `context.setState()`; has `getTemperature()`; runs under `ReplicaExchangeSampler` ([[ADR-0042 OpenMM multistate samplers for fixed-lambda cross-checks\|ADR-0042]]) |
-| S4 | ~~soft-core~~ folded into S1 (the energy function already includes it) | — |
+| stage | deliverable | acceptance | as built (2026-11-09) |
+|---|---|---|---|
+| S0 | skeleton builds and loads | trivial force = hand calculation | done on Reference + CPU; OpenCL moved to S2 |
+| S1 | MSLDNonbondedForce, Reference, soft-core included | λ = 1 invariant; reproduces `tests/data/oracle_toy.json` ([[MSLD energy function spec]]); partial-λ PME energies = Python engine; analytic dU/dλ = Python hybrid; independent Ewald sum and BLaDE single points | done except BLaDE ([[TASK-043 BLaDE fixed-lambda cross-check\|TASK-043]]) |
+| S2 | same force on common/GPU | = S1 within fp32 tolerance; last FD gone | not started |
+| S3 | MSLDIntegrator | T_θ = 300 K; barostat fires; energy conserved at γ = 0; θ/vθ/biases survive `context.setState()`; has `getTemperature()`; runs under `ReplicaExchangeSampler` ([[ADR-0042 OpenMM multistate samplers for fixed-lambda cross-checks\|ADR-0042]]) | not started |
+| S4 | ~~soft-core~~ folded into S1 (the energy function already includes it) | — | — |
+| P1 | Python layer: λ model, bonded/bias/restraint setup, ALF, output | same forces and same ALF updates as this repository on the same inputs | not started |
+| P2 | prep ported (`msld/prep/`) | same hybrid System as this repository from the same inputs | not started |
+| P3 | command line: PDB to running system | MDM2 runs from one command without this repository | not started |
 
-Original estimate: 4–7 months part-time. Technology choices: [[ADR-0027 Plugin technology choices|ADR-0027]].
+Original estimate for S0–S4: 4–7 months part-time. Technology choices: [[ADR-0027 Plugin technology choices|ADR-0027]].
+While the port runs, `use_plugin` (`msld/plugin.py`) lets this engine run on the plugin's force for comparison.
 
 ## OpenMM 8.6 multistate samplers ([[AUD-002 OpenMM 8.6 impact on MSLD|AUD-002]], [[ADR-0042 OpenMM multistate samplers for fixed-lambda cross-checks|ADR-0042]], proposed)
 OpenMM 8.6 adds `ReplicaExchangeSampler` / `ExpandedEnsembleSampler`. They swap replicas with
