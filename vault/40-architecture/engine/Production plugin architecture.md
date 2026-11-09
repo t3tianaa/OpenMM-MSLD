@@ -34,7 +34,7 @@ implementation during the port, then retires.
    serialization/         XML proxies (exists)
    python/                SWIG module (exists)
    openmm_ld/             Python layer: integrator (a CustomIntegrator, S3), model, forces, dynamics, alf, io (P1);
-                          prep (P2), cli (P3)
+                          prep (P2), cli (P3): all exist
 ```
 Bonded terms stay stock custom forces (already analytic).
 
@@ -48,7 +48,7 @@ Bonded terms stay stock custom forces (already analytic).
 | S4 | ~~soft-core~~ folded into S1 (the energy function already includes it) | — | — |
 | P1 | Python layer: λ model, bonded/bias/restraint setup, ALF, output | same forces and same ALF updates as this repository on the same inputs | done, 2026-11-09 (`docs/python_layer.md` in openmm-ld); MDM2 runs end to end from a prepared system, briefly |
 | P2 | prep ported (`msld/prep/`) | same hybrid System as this repository from the same inputs | done, 2026-11-09 (`docs/prep.md` in openmm-ld): System XML, positions and saved files identical with `random.seed` set |
-| P3 | command line: PDB to running system | MDM2 runs from one command without this repository | not started |
+| P3 | command line: PDB to running system | MDM2 runs from one command without this repository | done, 2026-11-09 (`docs/cli.md` in openmm-ld): `openmm-ld prepare\|alf\|run\|all`, outputs identical to the example scripts on a short run |
 
 Original estimate for S0–S4: 4–7 months part-time. Technology choices: [[ADR-0027 Plugin technology choices|ADR-0027]].
 While the port runs, `use_plugin` (`msld/plugin.py`) lets this engine run on the plugin's force for comparison.
