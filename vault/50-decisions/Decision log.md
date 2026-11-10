@@ -59,6 +59,7 @@ estimates. ADR-0031+ are current.
 | [[ADR-0043 Soft-core on by default for overlap-prone pairs\|ADR-0043]] | Soft-core on by default for overlap-prone pairs | accepted |
 | [[ADR-0044 Own SHAKE in the Python driver\|ADR-0044]] | Own SHAKE in the Python driver | accepted |
 | [[ADR-0045 Analytic biases and a large FD step\|ADR-0045]] | Analytic biases and a large FD step | accepted |
+| [[ADR-0046 openmm-ld becomes the standalone MSLD package\|ADR-0046]] | openmm-ld becomes the standalone MSLD package | accepted |
 
 Dataview (live, needs the plugin):
 ```dataview
